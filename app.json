@@ -41,10 +41,7 @@
       ]
     ],
     "extra": {
-      "apiBaseUrl": "https://www.intvstasera.it",
-      "eas": {
-        "projectId": "stasera-in-tv-app"
-      }
+      "apiBaseUrl": "https://www.intvstasera.it"
     }
   }
 }
