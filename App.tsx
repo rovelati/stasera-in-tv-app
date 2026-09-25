@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SafeAreaView, View, StyleSheet, StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProvider, useApp } from './src/context/AppContext';
 import { Header } from './src/components/Header';
 import { BottomTabBar } from './src/components/BottomTabBar';
 import { ProgramDetailModal } from './src/components/ProgramDetailModal';
+import { trackScreenView } from './src/services/analytics';
 
 // Screens
 import { StaseraScreen } from './src/screens/StaseraScreen';
@@ -17,6 +18,21 @@ import { SearchScreen } from './src/screens/SearchScreen';
 const MainNavigator: React.FC = () => {
   const { colors, isDarkMode, activeTab, searchQuery, setSearchQuery } = useApp();
   const [isSearching, setIsSearching] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isSearching || searchQuery.trim().length > 0) {
+      trackScreenView('Cerca');
+    } else {
+      const screenTitles: Record<string, string> = {
+        stasera: 'Stasera in TV',
+        ora: 'In Onda Ora',
+        domani: 'Domani in TV',
+        canali: 'Tutti i Canali',
+        preferiti: 'I Miei Preferiti',
+      };
+      trackScreenView(screenTitles[activeTab] || activeTab);
+    }
+  }, [activeTab, isSearching, searchQuery]);
 
   const handleSearchToggle = () => {
     if (isSearching) {

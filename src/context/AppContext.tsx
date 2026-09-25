@@ -4,6 +4,7 @@ import { CategoryType, TabType, Program, ReminderItem, Channel } from '../types'
 import { darkTheme, lightTheme, ThemeColors } from '../theme/colors';
 import { getFavoriteChannelIds, toggleFavoriteChannelId, getSavedReminders, addReminder, removeReminder } from '../services/storage';
 import { scheduleProgramReminder, cancelProgramReminder } from '../services/notifications';
+import { trackAppOpen, trackSelectProgram, trackReminder } from '../services/analytics';
 
 interface AppContextType {
   isDarkMode: boolean;
@@ -38,10 +39,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
 
   useEffect(() => {
-    // Load initial stored preferences
+    // Load initial stored preferences & track app open
     getFavoriteChannelIds().then(setFavorites);
     getSavedReminders().then(setReminders);
+    trackAppOpen();
   }, []);
+
+  const handleSetSelectedProgram = (prog: Program | null) => {
+    setSelectedProgram(prog);
+    if (prog) {
+      trackSelectProgram(prog.title, prog.channelName || 'Canale TV', prog.category);
+    }
+  };
 
   const toggleTheme = () => {
     setIsDarkMode(prev => !prev);
@@ -75,6 +84,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       const updated = await removeReminder(program.id);
       setReminders(updated);
+      trackReminder(program.title, channelName, 'remove');
       return false;
     } else {
       const notificationId = await scheduleProgramReminder(program, channelName);
@@ -90,6 +100,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       };
       const updated = await addReminder(newReminder);
       setReminders(updated);
+      trackReminder(program.title, channelName, 'add');
       return true;
     }
   };
@@ -113,7 +124,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         toggleReminder,
         hasReminder,
         selectedProgram,
-        setSelectedProgram,
+        setSelectedProgram: handleSetSelectedProgram,
       }}
     >
       {children}
