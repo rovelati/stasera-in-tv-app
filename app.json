@@ -38,10 +38,15 @@
           "color": "#2563eb",
           "sounds": []
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-font"
     ],
     "extra": {
-      "apiBaseUrl": "https://www.intvstasera.it"
+      "apiBaseUrl": "https://www.intvstasera.it",
+      "eas": {
+        "projectId": "8bc17db4-a8ac-43bc-a7ed-b2cf96650529"
+      }
     }
   }
 }
