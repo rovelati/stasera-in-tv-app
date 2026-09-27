@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '../context/AppContext';
 import { Search, Moon, Sun, X, Bell } from 'lucide-react-native';
 
@@ -14,6 +15,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSearchToggle,
   isSearching = false,
 }) => {
+  const insets = useSafeAreaInsets();
   const { colors, isDarkMode, toggleTheme, searchQuery, setSearchQuery, reminders, setActiveTab } = useApp();
 
   const getTodayFormatted = () => {
@@ -26,7 +28,16 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.surface,
+          borderBottomColor: colors.border,
+          paddingTop: insets.top > 0 ? insets.top + 6 : 14,
+        },
+      ]}
+    >
       {isSearching ? (
         <View style={styles.searchBar}>
           <Search size={18} color={colors.textSecondary} style={styles.searchIcon} />
@@ -51,9 +62,11 @@ export const Header: React.FC<HeaderProps> = ({
       ) : (
         <View style={styles.row}>
           <View style={styles.titleContainer}>
-            <View style={styles.logoBadge}>
-              <Text style={styles.logoText}>TV</Text>
-            </View>
+            <Image
+              source={require('../../assets/icon.png')}
+              style={styles.logoImage}
+              resizeMode="cover"
+            />
             <View>
               <Text style={[styles.title, { color: colors.text }]}>Stasera In TV</Text>
               <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
@@ -119,21 +132,13 @@ const styles = StyleSheet.create({
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
-  logoBadge: {
-    width: 36,
-    height: 36,
+  logoImage: {
+    width: 38,
+    height: 38,
     borderRadius: 10,
-    backgroundColor: '#2563eb',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoText: {
-    color: '#ffffff',
-    fontWeight: '900',
-    fontSize: 15,
-    letterSpacing: 0.5,
+    backgroundColor: '#0f172a',
   },
   title: {
     fontSize: 18,

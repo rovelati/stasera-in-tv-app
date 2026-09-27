@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   View,
   Text,
@@ -6,18 +6,56 @@ import {
   Modal,
   Image,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   ScrollView,
   Share,
   Dimensions,
+  PanResponder,
+  Animated,
 } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { openLiveStream } from '../services/streaming';
-import { X, Play, Bell, Share2, Clock, Film, Tv, Calendar, Check } from 'lucide-react-native';
+import { X, Play, Bell, Share2, Clock, Check } from 'lucide-react-native';
 
-const { height, width } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 export const ProgramDetailModal: React.FC = () => {
   const { selectedProgram, setSelectedProgram, colors, toggleReminder, hasReminder } = useApp();
+  const panY = useRef(new Animated.Value(0)).current;
+
+  const handleClose = () => {
+    Animated.timing(panY, {
+      toValue: height,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      panY.setValue(0);
+      setSelectedProgram(null);
+    });
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 10,
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          panY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 80 || gestureState.vy > 0.6) {
+          handleClose();
+        } else {
+          Animated.spring(panY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 4,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   if (!selectedProgram) return null;
 
@@ -37,25 +75,47 @@ export const ProgramDetailModal: React.FC = () => {
   return (
     <Modal
       visible={Boolean(selectedProgram)}
-      animationType="slide"
+      animationType="fade"
       transparent
-      onRequestClose={() => setSelectedProgram(null)}
+      onRequestClose={handleClose}
     >
       <View style={styles.backdrop}>
-        <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          {/* Header handle & close */}
-          <View style={styles.sheetHeader}>
-            <View style={[styles.handle, { backgroundColor: colors.borderSubtle }]} />
+        {/* Tap outside sheet to dismiss */}
+        <TouchableWithoutFeedback onPress={handleClose}>
+          <View style={styles.backdropDismiss} />
+        </TouchableWithoutFeedback>
+
+        <Animated.View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              transform: [{ translateY: panY }],
+            },
+          ]}
+        >
+          {/* Header handle with pan gesture & close button */}
+          <View {...panResponder.panHandlers} style={styles.sheetHeader}>
+            <TouchableOpacity onPress={handleClose} hitSlop={{ top: 20, bottom: 20, left: 40, right: 40 }}>
+              <View style={[styles.handle, { backgroundColor: colors.borderSubtle }]} />
+            </TouchableOpacity>
+
             <TouchableOpacity
-              style={[styles.closeBtn, { backgroundColor: colors.surfaceSubtle }]}
-              onPress={() => setSelectedProgram(null)}
-              hitSlop={10}
+              style={[styles.closeBtn, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}
+              onPress={handleClose}
+              hitSlop={{ top: 24, bottom: 24, left: 24, right: 24 }}
+              activeOpacity={0.7}
             >
-              <X size={18} color={colors.text} />
+              <X size={20} color={colors.text} strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            bounces={false}
+          >
             {/* Poster or Big Banner */}
             {selectedProgram.posterUrl ? (
               <Image
@@ -141,9 +201,9 @@ export const ProgramDetailModal: React.FC = () => {
                 activeOpacity={0.8}
               >
                 {isReminded ? (
-                  <Check size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                  <Check size={18} color="#ffffff" strokeWidth={2.5} style={{ marginRight: 6 }} />
                 ) : (
-                  <Bell size={16} color={colors.text} style={{ marginRight: 6 }} />
+                  <Bell size={18} color={colors.text} style={{ marginRight: 6 }} />
                 )}
                 <Text
                   style={[
@@ -179,7 +239,7 @@ export const ProgramDetailModal: React.FC = () => {
               </Text>
             </TouchableOpacity>
           </ScrollView>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -191,6 +251,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
   },
+  backdropDismiss: {
+    flex: 1,
+  },
   sheet: {
     maxHeight: height * 0.88,
     borderTopLeftRadius: 24,
@@ -200,28 +263,30 @@ const styles = StyleSheet.create({
   },
   sheetHeader: {
     alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 4,
+    paddingTop: 12,
+    paddingBottom: 10,
     position: 'relative',
   },
   handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
+    width: 48,
+    height: 5,
+    borderRadius: 3,
   },
   closeBtn: {
     position: 'absolute',
     right: 16,
-    top: 10,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    top: 8,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 10,
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 44,
   },
   bannerImage: {
     width: '100%',

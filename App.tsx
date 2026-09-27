@@ -65,10 +65,11 @@ const MainNavigator: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
+    <View style={[styles.safeArea, { backgroundColor: colors.surface }]}>
       <StatusBar
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
         backgroundColor={colors.surface}
+        translucent={false}
       />
       <Header
         isSearching={isSearching}
@@ -79,7 +80,7 @@ const MainNavigator: React.FC = () => {
       </View>
       <BottomTabBar />
       <ProgramDetailModal />
-    </SafeAreaView>
+    </View>
   );
 };
 
