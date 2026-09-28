@@ -76,6 +76,14 @@ export const StaseraScreen: React.FC = () => {
     }
   }
 
+  const todayRome = new Date().toLocaleDateString('it-IT', {
+    timeZone: 'Europe/Rome',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+  const formattedToday = todayRome.charAt(0).toUpperCase() + todayRome.slice(1);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <CategoryFilter />
@@ -86,6 +94,21 @@ export const StaseraScreen: React.FC = () => {
         <FlatList
           data={filteredItems}
           keyExtractor={item => `${item.channel.id}_${item.program.id}`}
+          ListHeaderComponent={
+            <View style={[styles.headerBanner, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.bannerRow}>
+                <Text style={[styles.bannerTitle, { color: colors.text }]}>
+                  🌙 Stasera in TV · {formattedToday}
+                </Text>
+                <View style={[styles.badgePill, { backgroundColor: colors.primaryLight + '25', borderColor: colors.primary }]}>
+                  <Text style={[styles.badgePillText, { color: colors.primary }]}>Prima Serata</Text>
+                </View>
+              </View>
+              <Text style={[styles.bannerSubtitle, { color: colors.textSecondary }]}>
+                Programmi in onda a partire dalle 21:15 su tutti i canali TV nazionali e regionali.
+              </Text>
+            </View>
+          }
           renderItem={({ item }) => (
             <ProgramCard program={item.program} channel={item.channel} />
           )}
@@ -115,8 +138,42 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  headerBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 6,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  bannerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  bannerTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    flex: 1,
+    marginRight: 8,
+  },
+  badgePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  badgePillText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  bannerSubtitle: {
+    fontSize: 11.5,
+    lineHeight: 16,
+  },
   listContent: {
-    paddingVertical: 10,
-    paddingBottom: 20,
+    paddingVertical: 4,
+    paddingBottom: 24,
   },
 });

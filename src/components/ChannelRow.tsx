@@ -7,14 +7,17 @@ import { Play, Heart, MapPin } from 'lucide-react-native';
 
 interface ChannelRowProps {
   channel: Channel;
+  onPress?: (channel: Channel) => void;
 }
 
-export const ChannelRow: React.FC<ChannelRowProps> = ({ channel }) => {
+export const ChannelRow: React.FC<ChannelRowProps> = ({ channel, onPress }) => {
   const { colors, toggleFavorite, isFavorite } = useApp();
   const isFav = isFavorite(channel.id);
 
   return (
-    <View
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={() => onPress?.(channel)}
       style={[
         styles.container,
         {
@@ -52,7 +55,7 @@ export const ChannelRow: React.FC<ChannelRowProps> = ({ channel }) => {
             </View>
           ) : (
             <Text style={[styles.typeText, { color: colors.textMuted }]}>
-              {channel.type || 'Nazionale'}
+              {channel.type || 'Nazionale'} · Tocca per palinsesto
             </Text>
           )}
         </View>
@@ -82,7 +85,7 @@ export const ChannelRow: React.FC<ChannelRowProps> = ({ channel }) => {
           />
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 

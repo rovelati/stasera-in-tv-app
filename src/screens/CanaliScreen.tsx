@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { ChannelRow } from '../components/ChannelRow';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { EmptyState } from '../components/EmptyState';
+import { ChannelScheduleModal } from '../components/ChannelScheduleModal';
 import { fetchChannelsApi } from '../api/client';
 import { Channel } from '../types';
 import { Search } from 'lucide-react-native';
@@ -14,6 +15,7 @@ export const CanaliScreen: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [filterText, setFilterText] = useState<string>('');
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -74,7 +76,12 @@ export const CanaliScreen: React.FC = () => {
         <SectionList
           sections={sections}
           keyExtractor={item => item.id}
-          renderItem={({ item }) => <ChannelRow channel={item} />}
+          renderItem={({ item }) => (
+            <ChannelRow
+              channel={item}
+              onPress={(channel) => setSelectedChannel(channel)}
+            />
+          )}
           renderSectionHeader={({ section: { title } }) => (
             <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
               <Text style={[styles.sectionHeaderText, { color: colors.textSecondary }]}>
@@ -100,6 +107,12 @@ export const CanaliScreen: React.FC = () => {
           }
         />
       )}
+
+      {/* Single Channel Schedule Modal */}
+      <ChannelScheduleModal
+        channel={selectedChannel}
+        onClose={() => setSelectedChannel(null)}
+      />
     </View>
   );
 };
