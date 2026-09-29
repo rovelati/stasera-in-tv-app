@@ -8,6 +8,7 @@
  * DESIGN & INTERAZIONI NATIVE:
  * 1. Bottom Sheet con Gesto di Trascinamento (Swipe-Down PanResponder):
  *    - Chiusura fluida con trascinamento verso il basso con fisica a molla (Spring Physics).
+ *    - Chiusura a prova di sfarfallio (senza doppio scatto o riapertura visiva).
  * 2. Tasto di Chiusura Rapido con Touch Target allargato (HitSlop).
  * 3. Banner Locandina HD / Immagine di Copertina.
  * 4. Pulsante Notifica Sveglia (-10 min) con toggle di stato e feedback visivo.
@@ -16,7 +17,7 @@
  * @module components/ProgramDetailModal
  */
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -40,14 +41,29 @@ const { height } = Dimensions.get('window');
 export const ProgramDetailModal: React.FC = () => {
   const { selectedProgram, setSelectedProgram, colors, toggleReminder, hasReminder } = useApp();
   const panY = useRef(new Animated.Value(0)).current;
+  const isClosing = useRef(false);
 
+  // Ripristina la posizione iniziale del foglio solo all'apertura di un nuovo programma
+  useEffect(() => {
+    if (selectedProgram) {
+      isClosing.current = false;
+      panY.setValue(0);
+    }
+  }, [selectedProgram]);
+
+  /**
+   * Chiusura fluida con animazione discendente verso il basso.
+   * Evita il reset prematuro di panY per eliminare sfarfallii e riaperture transitorie.
+   */
   const handleClose = () => {
+    if (isClosing.current) return;
+    isClosing.current = true;
+
     Animated.timing(panY, {
       toValue: height,
-      duration: 200,
+      duration: 180,
       useNativeDriver: true,
     }).start(() => {
-      panY.setValue(0);
       setSelectedProgram(null);
     });
   };
@@ -86,7 +102,7 @@ export const ProgramDetailModal: React.FC = () => {
         message: `Guarda "${selectedProgram.title}" in TV stasera (${selectedProgram.startTimeFormatted || ''}) su ${selectedProgram.channelName || ''}! Scopri la guida completa su https://www.intvstasera.it`,
       });
     } catch (err) {
-      console.warn('Error sharing:', err);
+      console.warn('[ProgramDetailModal] Errore condivisione:', err);
     }
   };
 
@@ -98,7 +114,7 @@ export const ProgramDetailModal: React.FC = () => {
       onRequestClose={handleClose}
     >
       <View style={styles.backdrop}>
-        {/* Tap outside sheet to dismiss */}
+        {/* Tocco all'esterno del foglio per chiusura immediata */}
         <TouchableWithoutFeedback onPress={handleClose}>
           <View style={styles.backdropDismiss} />
         </TouchableWithoutFeedback>
@@ -113,7 +129,7 @@ export const ProgramDetailModal: React.FC = () => {
             },
           ]}
         >
-          {/* Header handle with pan gesture & close button */}
+          {/* Maniglia di trascinamento e tasto X di chiusura */}
           <View {...panResponder.panHandlers} style={styles.sheetHeader}>
             <TouchableOpacity onPress={handleClose} hitSlop={{ top: 20, bottom: 20, left: 40, right: 40 }}>
               <View style={[styles.handle, { backgroundColor: colors.borderSubtle }]} />
@@ -122,7 +138,7 @@ export const ProgramDetailModal: React.FC = () => {
             <TouchableOpacity
               style={[styles.closeBtn, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}
               onPress={handleClose}
-              hitSlop={{ top: 24, bottom: 24, left: 24, right: 24 }}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
               activeOpacity={0.7}
             >
               <X size={20} color={colors.text} strokeWidth={2.5} />
@@ -134,7 +150,7 @@ export const ProgramDetailModal: React.FC = () => {
             contentContainerStyle={styles.scrollContent}
             bounces={false}
           >
-            {/* Poster or Big Banner */}
+            {/* Locandina / Immagine di copertina */}
             {selectedProgram.posterUrl ? (
               <Image
                 source={{ uri: selectedProgram.posterUrl }}
@@ -143,7 +159,7 @@ export const ProgramDetailModal: React.FC = () => {
               />
             ) : null}
 
-            {/* Channel info pill */}
+            {/* Metadati Canale ed Emittente */}
             <View style={styles.metaHeader}>
               <View style={[styles.channelPill, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
                 {selectedProgram.channelLogo ? (
@@ -172,12 +188,12 @@ export const ProgramDetailModal: React.FC = () => {
               ) : null}
             </View>
 
-            {/* Title */}
+            {/* Titolo Principale */}
             <Text style={[styles.title, { color: colors.text }]}>
               {selectedProgram.title}
             </Text>
 
-            {/* Time & Schedule */}
+            {/* Orario e Durata */}
             <View style={[styles.timeCard, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}>
               <Clock size={16} color={colors.primary} style={{ marginRight: 6 }} />
               <Text style={[styles.timeText, { color: colors.text }]}>
@@ -186,7 +202,7 @@ export const ProgramDetailModal: React.FC = () => {
               </Text>
             </View>
 
-            {/* Action Buttons */}
+            {/* Tasti di Azione Principali */}
             <View style={styles.actionRow}>
               {selectedProgram.streamUrl ? (
                 <TouchableOpacity
@@ -234,7 +250,7 @@ export const ProgramDetailModal: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Synopsis Description */}
+            {/* Sinossi / Trama Completa */}
             <View style={styles.descSection}>
               <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
                 TRAMA & DETTAGLI
@@ -245,7 +261,7 @@ export const ProgramDetailModal: React.FC = () => {
               </Text>
             </View>
 
-            {/* Share action */}
+            {/* Tasto Condividi */}
             <TouchableOpacity
               style={[styles.shareBtn, { borderColor: colors.borderSubtle }]}
               onPress={handleShare}
