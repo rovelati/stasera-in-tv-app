@@ -114,6 +114,11 @@ export const OraScreen: React.FC = () => {
         <FlatList
           data={validLiveItems}
           keyExtractor={item => item.channel.id}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={true}
+          updateCellsBatchingPeriod={30}
           renderItem={({ item }) =>
             item.currentProgram ? (
               <LiveProgramCard

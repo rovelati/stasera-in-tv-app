@@ -76,6 +76,11 @@ export const CanaliScreen: React.FC = () => {
         <SectionList
           sections={sections}
           keyExtractor={item => item.id}
+          initialNumToRender={15}
+          maxToRenderPerBatch={15}
+          windowSize={5}
+          removeClippedSubviews={true}
+          updateCellsBatchingPeriod={30}
           renderItem={({ item }) => (
             <ChannelRow
               channel={item}

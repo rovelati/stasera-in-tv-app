@@ -95,6 +95,11 @@ export const DomaniScreen: React.FC = () => {
         <FlatList
           data={filteredItems}
           keyExtractor={item => `${item.channel.id}_${item.program.id}`}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={true}
+          updateCellsBatchingPeriod={30}
           ListHeaderComponent={
             <View style={[styles.headerBanner, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.bannerRow}>

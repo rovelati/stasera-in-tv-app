@@ -128,6 +128,10 @@ export const PreferitiScreen: React.FC = () => {
         <FlatList
           data={favoriteChannels}
           keyExtractor={item => item.id}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={true}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={
             <View style={styles.infoBanner}>
@@ -217,6 +221,10 @@ export const PreferitiScreen: React.FC = () => {
         <FlatList
           data={reminders}
           keyExtractor={item => item.id}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={true}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={
             <View style={styles.infoBanner}>
