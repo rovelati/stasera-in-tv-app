@@ -1,3 +1,22 @@
+/**
+ * ============================================================================
+ * STASERA IN TV - PROGRAM CARD COMPONENT
+ * ============================================================================
+ * 
+ * Card principale della guida TV per i programmi serali.
+ * 
+ * ELEMENTI GRAFICI & FUNZIONALI:
+ * 1. Intestazione Canale: logo dell'emittente, LCN digitale terrestre e cuoricino preferiti.
+ * 2. Badge Prima Serata: evidenzia visivamente i programmi delle 21:15.
+ * 3. Locandina Poster con placeholder dinamico in caso di assenza immagine.
+ * 4. Badge di Categoria con color-coding semantico (Film, Sport, Serie TV, Documentari).
+ * 5. Tasti Azione Rapida:
+ *    - "Diretta": apre il player streaming live ufficiale.
+ *    - "Promemoria": attiva la sveglia 10 minuti prima con feedback visivo.
+ * 
+ * @module components/ProgramCard
+ */
+
 import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions } from 'react-native';
 import { useApp } from '../context/AppContext';

@@ -1,3 +1,24 @@
+/**
+ * ============================================================================
+ * STASERA IN TV - DIRECTORY CANALI TV (NAZIONALI, REGIONALI & TEMATICI)
+ * ============================================================================
+ * 
+ * Questa vista fornisce la guida completa e navigabile a tutti i canali TV:
+ * 
+ * SEZIONI TEMATICHE (SectionList):
+ * 1. 📺 Canali Nazionali & Digitale Terrestre (Rai, Mediaset, Discovery, La7, TV8, Nove).
+ * 2. 📍 Emittenti Regionali & Territoriali (con metadati geografici di città e regione).
+ * 3. ⚽ Canali Tematici & Club Serie A (Inter TV, Milan TV, Juventus Creator Lab, ecc.).
+ * 
+ * INTERATTIVITÀ:
+ * - Filtro di ricerca in tempo reale (nome, città o regione).
+ * - Tap sul canale per aprire la modale con il palinsesto completo (`ChannelScheduleModal`).
+ * - Tasto rapido per la diretta streaming ufficiale.
+ * - Tasto preferiti ❤️ per salvare il canale.
+ * 
+ * @module screens/CanaliScreen
+ */
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, SectionList, Text, StyleSheet, RefreshControl, TextInput } from 'react-native';
 import { useApp } from '../context/AppContext';
@@ -17,12 +38,13 @@ export const CanaliScreen: React.FC = () => {
   const [filterText, setFilterText] = useState<string>('');
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
 
-  const loadData = useCallback(async () => {
+  /** Carica l'elenco dei canali da cache o rete */
+  const loadData = useCallback(async (isRefresh = false) => {
     try {
-      const data = await fetchChannelsApi();
+      const data = await fetchChannelsApi(isRefresh);
       setChannels(data);
     } catch (err) {
-      console.warn('Error fetching channels:', err);
+      console.warn('[CanaliScreen] Errore caricamento canali:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -35,15 +57,17 @@ export const CanaliScreen: React.FC = () => {
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadData();
+    loadData(true);
   };
 
+  // Filtro canali in tempo reale su nome, città e regione
   const filteredChannels = channels.filter(ch =>
     ch.name.toLowerCase().includes(filterText.toLowerCase()) ||
     (ch.geo?.city && ch.geo.city.toLowerCase().includes(filterText.toLowerCase())) ||
     (ch.geo?.region && ch.geo.region.toLowerCase().includes(filterText.toLowerCase()))
   );
 
+  // Ripartizione dei canali nelle 3 macro-sezioni
   const nationalChannels = filteredChannels.filter(ch => !ch.geo?.isLocal && !ch.id.startsWith('seriea-'));
   const regionalChannels = filteredChannels.filter(ch => ch.geo?.isLocal && !ch.id.startsWith('seriea-'));
   const clubChannels = filteredChannels.filter(ch => ch.id.startsWith('seriea-') || ch.id.includes('-tv'));
@@ -56,7 +80,7 @@ export const CanaliScreen: React.FC = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Search Input */}
+      {/* Barra di ricerca canali con icona */}
       <View style={[styles.searchBox, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <View style={[styles.searchInner, { backgroundColor: colors.surfaceSubtle }]}>
           <Search size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
@@ -113,7 +137,7 @@ export const CanaliScreen: React.FC = () => {
         />
       )}
 
-      {/* Single Channel Schedule Modal */}
+      {/* Modale con il palinsesto del canale selezionato */}
       <ChannelScheduleModal
         channel={selectedChannel}
         onClose={() => setSelectedChannel(null)}

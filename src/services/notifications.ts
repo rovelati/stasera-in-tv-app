@@ -1,8 +1,33 @@
+/**
+ * ============================================================================
+ * STASERA IN TV - MODULO NOTIFICHE PUSH LOCALI & ALLARMI ESATTI
+ * ============================================================================
+ * 
+ * Questo servizio gestisce la pianificazione delle notifiche di sistema locali:
+ * 
+ * 1. CONFIGURAZIONE CANALE ANDROID (NotificationChannel):
+ *    - Canale ad alta priorità (`AndroidImportance.MAX`) per garantire il pop-up
+ *      heads-up su Android 8.0+ (API 26) fino ad Android 15/16 (API 36).
+ *    - Vibrazione personalizzata e colore del LED di notifica (#2563eb).
+ * 
+ * 2. TRIGGER INTELLIGENTE:
+ *    - Se mancano più di 10 minuti all'inizio: calcola l'offset temporale esatto (-10 min).
+ *    - Se il programma sta per iniziare o è già in onda: invia un avviso immediato di conferma.
+ * 
+ * 3. GESTIONE DEI PERMESSI:
+ *    - Richiesta dinamica del permesso `POST_NOTIFICATIONS` su Android 13+ (API 33+) e iOS.
+ * 
+ * @module services/notifications
+ */
+
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { Program } from '../types';
 
-// Configure notification presentation behavior
+/**
+ * Configura il comportamento di presentazione delle notifiche in primo piano (Foreground).
+ * Consente la visualizzazione dell'avviso visivo, il suono e il badge sull'icona.
+ */
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -11,10 +36,16 @@ Notifications.setNotificationHandler({
   }),
 });
 
+/**
+ * Registra il canale di notifica specifico per Android e richiede i permessi di sistema.
+ * 
+ * @returns true se il permesso di notifica è accordato dall'utente, false altrimenti
+ */
 export async function registerForPushNotificationsAsync(): Promise<boolean> {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('stasera-in-tv-reminders', {
       name: 'Promemoria Programmi TV',
+      description: 'Notifiche 10 minuti prima dell\'inizio dei tuoi programmi preferiti',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#2563eb',
@@ -34,7 +65,11 @@ export async function registerForPushNotificationsAsync(): Promise<boolean> {
 }
 
 /**
- * Schedule a local notification 10 minutes before program starts.
+ * Pianifica una notifica locale 10 minuti prima dell'orario di inizio del programma.
+ * 
+ * @param program Programma televisivo per cui impostare la sveglia
+ * @param channelName Nome del canale emittente
+ * @returns ID univoco della notifica generata dal sistema operativo, o null in caso di errore
  */
 export async function scheduleProgramReminder(
   program: Program,
@@ -42,15 +77,15 @@ export async function scheduleProgramReminder(
 ): Promise<string | null> {
   const hasPermission = await registerForPushNotificationsAsync();
   if (!hasPermission) {
-    throw new Error('Permesso di notifica non concesso');
+    throw new Error('Permesso di notifica non concesso dall\'utente');
   }
 
   const startTimestamp = new Date(program.startTime).getTime();
-  const triggerTimestamp = startTimestamp - 10 * 60 * 1000; // -10 minutes
+  const triggerTimestamp = startTimestamp - 10 * 60 * 1000; // 10 minuti prima
   const now = Date.now();
 
   if (triggerTimestamp <= now) {
-    // If less than 10 mins remaining or already started, schedule in 10 seconds as immediate reminder
+    // Se mancano meno di 10 minuti o il programma è già iniziato, notifica subito
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title: `📺 In onda adesso su ${channelName}`,
@@ -85,12 +120,14 @@ export async function scheduleProgramReminder(
 }
 
 /**
- * Cancel a previously scheduled reminder by ID
+ * Cancella una notifica programmata precedentemente attraverso il suo ID nativo.
+ * 
+ * @param notificationId ID restituito in fase di schedulazione
  */
 export async function cancelProgramReminder(notificationId: string): Promise<void> {
   try {
     await Notifications.cancelScheduledNotificationAsync(notificationId);
   } catch (err) {
-    console.warn('Failed to cancel notification:', err);
+    console.warn('[Notifications] Errore cancellazione notifica:', err);
   }
 }

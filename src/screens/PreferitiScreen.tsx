@@ -1,3 +1,21 @@
+/**
+ * ============================================================================
+ * STASERA IN TV - SCHERMATA "PREFERITI & PROMEMORIA" (USER HUB)
+ * ============================================================================
+ * 
+ * Questo hub unificato gestisce la personalizzazione dell'esperienza utente:
+ * 
+ * 1. TAB "CANALI PREFERITI" (❤️):
+ *    - Mostra i canali salvati con il cuoricino.
+ *    - Offre scorciatoie rapide: streaming in diretta e apertura del palinsesto completo.
+ * 
+ * 2. TAB "PROMEMORIA ATTIVI" (🔔):
+ *    - Elenca tutti i programmi TV per cui è stato impostato un allarme.
+ *    - Mostra il countdown e permette la cancellazione rapida con richiesta di conferma.
+ * 
+ * @module screens/PreferitiScreen
+ */
+
 import React, { useState, useEffect } from 'react';
 import {
   View,

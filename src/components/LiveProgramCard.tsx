@@ -1,3 +1,22 @@
+/**
+ * ============================================================================
+ * STASERA IN TV - LIVE PROGRAM CARD COMPONENT
+ * ============================================================================
+ * 
+ * Componente per la visualizzazione dell'evento televisivo in corso di trasmissione:
+ * 
+ * FUNZIONALITÀ PRINCIPALI:
+ * 1. Progress Bar in Tempo Reale:
+ *    - Calcola la percentuale di trasmissione completata e i minuti rimanenti (`minuti rimasti`).
+ *    - Aggiornamento automatico periodico a 30 secondi.
+ * 2. Preview del Programma Successivo:
+ *    - Mostra il programma in arrivo con orario e titolo.
+ * 3. Tasto Rapido Diretta Streaming:
+ *    - Avvia la trasmissione live con un tocco.
+ * 
+ * @module components/LiveProgramCard
+ */
+
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { useApp } from '../context/AppContext';

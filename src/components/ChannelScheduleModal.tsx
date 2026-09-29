@@ -1,3 +1,20 @@
+/**
+ * ============================================================================
+ * STASERA IN TV - CHANNEL SCHEDULE MODAL (PALINSESTO DEL CANALE)
+ * ============================================================================
+ * 
+ * Modale dedicata all'ispezione approfondita del palinsesto di un singolo canale TV:
+ * 
+ * CARATTERISTICHE:
+ * 1. Switcher Sottoschede: "🌙 Stasera in TV" e "📅 Domani".
+ * 2. Header Canale con LCN e pulsante Toggle Preferiti ❤️.
+ * 3. Tasto Esteso Diretta Streaming Ufficiale.
+ * 4. Lista Completa degli eventi televisivi con orario, genere e sinossi.
+ * 5. Tap sul programma per aprire la scheda di dettaglio e impostare promemoria.
+ * 
+ * @module components/ChannelScheduleModal
+ */
+
 import React, { useState, useEffect } from 'react';
 import {
   View,

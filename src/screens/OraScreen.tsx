@@ -1,3 +1,24 @@
+/**
+ * ============================================================================
+ * STASERA IN TV - SCHERMATA "IN ONDA ADESSO" (LIVE BROADCAST ENGINE)
+ * ============================================================================
+ * 
+ * Questa vista gestisce la visualizzazione in tempo reale dei programmi TV
+ * attualmente in trasmissione su tutti i canali del Digitale Terrestre e satellitari:
+ * 
+ * MECCANISMI CHIAVE:
+ * 1. Orologio di precisione a intervallo breve (10s):
+ *    - Mantiene sincronizzato l'orario mostrato nel banner con il fuso `Europe/Rome`.
+ * 2. Polling automatico periodico a 60s:
+ *    - Ricalcola automaticamente il programma in onda e il successivo al variare dell'ora.
+ * 3. Barra di avanzamento dinamica:
+ *    - Calcola la percentuale di trasmissione trascorsa per ciascun evento (`LiveProgramCard`).
+ * 4. Virtualizzazione FlatList ottimizzata:
+ *    - Carica a blocchi di 10 canali per scroll fluido senza cali di framerate.
+ * 
+ * @module screens/OraScreen
+ */
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, RefreshControl } from 'react-native';
 import { useApp } from '../context/AppContext';
@@ -23,6 +44,7 @@ export const OraScreen: React.FC = () => {
   const [currentTimeStr, setCurrentTimeStr] = useState<string>('');
   const [currentDateStr, setCurrentDateStr] = useState<string>('');
 
+  /** Aggiorna le stringhe dell'orologio e della data di Roma */
   const updateTimeHeader = useCallback(() => {
     const now = new Date();
     const timeFormatted = now.toLocaleTimeString('it-IT', {
@@ -41,13 +63,14 @@ export const OraScreen: React.FC = () => {
     setCurrentDateStr(dateFormatted);
   }, []);
 
-  const loadData = useCallback(async () => {
+  /** Carica i canali con il calcolo del programma in onda */
+  const loadData = useCallback(async (isRefresh = false) => {
     try {
       updateTimeHeader();
-      const data = await fetchOraProgramsApi();
+      const data = await fetchOraProgramsApi(isRefresh);
       setLiveItems(data);
     } catch (err) {
-      console.warn('Error loading live programs:', err);
+      console.warn('[OraScreen] Errore caricamento programmi live:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -56,26 +79,34 @@ export const OraScreen: React.FC = () => {
 
   useEffect(() => {
     loadData();
+
+    // Timer per aggiornamento orologio ogni 10 secondi
     const timer = setInterval(() => {
       updateTimeHeader();
     }, 10000);
-    const apiInterval = setInterval(loadData, 60000); // Poll API every minute
+
+    // Polling periodico ogni 60 secondi per aggiornare i programmi terminati
+    const apiInterval = setInterval(() => {
+      loadData(false);
+    }, 60000);
+
     return () => {
       clearInterval(timer);
       clearInterval(apiInterval);
     };
   }, [loadData, updateTimeHeader]);
 
+  /** Gestione del refresh manuale */
   const onRefresh = () => {
     setRefreshing(true);
-    loadData();
+    loadData(true);
   };
 
   const validLiveItems = liveItems.filter(item => item.currentProgram !== null);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Informative Header Banner */}
+      {/* Banner Informativo con orologio sincronizzato e pulsante Live */}
       <View
         style={[
           styles.headerBanner,

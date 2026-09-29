@@ -1,3 +1,21 @@
+/**
+ * ============================================================================
+ * STASERA IN TV - PROGRAM DETAIL BOTTOM SHEET MODAL
+ * ============================================================================
+ * 
+ * Scheda descrittiva approfondita per il singolo evento televisivo:
+ * 
+ * DESIGN & INTERAZIONI NATIVE:
+ * 1. Bottom Sheet con Gesto di Trascinamento (Swipe-Down PanResponder):
+ *    - Chiusura fluida con trascinamento verso il basso con fisica a molla (Spring Physics).
+ * 2. Tasto di Chiusura Rapido con Touch Target allargato (HitSlop).
+ * 3. Banner Locandina HD / Immagine di Copertina.
+ * 4. Pulsante Notifica Sveglia (-10 min) con toggle di stato e feedback visivo.
+ * 5. Condivisione Nativa (Share API) del programma sui social/messaggistica.
+ * 
+ * @module components/ProgramDetailModal
+ */
+
 import React, { useRef } from 'react';
 import {
   View,
