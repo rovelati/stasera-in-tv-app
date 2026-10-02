@@ -1,16 +1,16 @@
 /**
  * ============================================================================
- * STASERA IN TV - CHANNEL SCHEDULE MODAL (PALINSESTO DEL CANALE)
+ * STASERA IN TV - CHANNEL SCHEDULE MODAL (PALINSESTO COMPLETO DEL CANALE)
  * ============================================================================
  * 
  * Modale dedicata all'ispezione approfondita del palinsesto di un singolo canale TV:
  * 
  * CARATTERISTICHE:
- * 1. Switcher Sottoschede: "🌙 Stasera in TV" e "📅 Domani".
- * 2. Header Canale con LCN e pulsante Toggle Preferiti ❤️.
- * 3. Tasto Esteso Diretta Streaming Ufficiale.
- * 4. Lista Completa degli eventi televisivi con orario, genere e sinossi.
- * 5. Tap sul programma per aprire la scheda di dettaglio e impostare promemoria.
+ * 1. Switcher a 3 Sottoschede: "📺 Oggi (24h)", "🌙 Stasera", "📅 Domani".
+ * 2. Visualizzazione 24h completa con evidenziazione "🔴 IN ONDA ADESSO" sul programma corrente.
+ * 3. Header Canale con logo ad alta risoluzione (ChannelLogo), LCN e pulsante Toggle Preferiti ❤️.
+ * 4. Tasto Rapido Diretta Streaming Ufficiale.
+ * 5. Scheda programma completa con orario di inizio/fine, genere, sinossi e link al dettaglio.
  * 
  * @module components/ChannelScheduleModal
  */
@@ -21,7 +21,6 @@ import {
   Text,
   StyleSheet,
   Modal,
-  Image,
   TouchableOpacity,
   ScrollView,
   Dimensions,
@@ -30,8 +29,16 @@ import {
 import { useApp } from '../context/AppContext';
 import { Channel, Program } from '../types';
 import { openLiveStream } from '../services/streaming';
-import { fetchStaseraProgramsApi, fetchDomaniProgramsApi, fetchOraProgramsApi } from '../api/client';
-import { X, Play, Heart, Clock, Film, Bell, Tv, ChevronRight } from 'lucide-react-native';
+import {
+  fetchStaseraProgramsApi,
+  fetchDomaniProgramsApi,
+  fetchChannelDayScheduleApi,
+  getCurrentRomeMinutes,
+  getTimeMinutes,
+  normalizeChannelId,
+} from '../api/client';
+import { ChannelLogo } from './ChannelLogo';
+import { X, Play, Heart, Clock, Film, Bell, Tv, ChevronRight, Radio } from 'lucide-react-native';
 
 const { height } = Dimensions.get('window');
 
@@ -42,7 +49,7 @@ interface ChannelScheduleModalProps {
 
 export const ChannelScheduleModal: React.FC<ChannelScheduleModalProps> = ({ channel, onClose }) => {
   const { colors, isFavorite, toggleFavorite, setSelectedProgram, hasReminder } = useApp();
-  const [activeSubTab, setActiveSubTab] = useState<'stasera' | 'domani'>('stasera');
+  const [activeSubTab, setActiveSubTab] = useState<'oggi' | 'stasera' | 'domani'>('oggi');
   const [loading, setLoading] = useState<boolean>(false);
   const [channelPrograms, setChannelPrograms] = useState<Program[]>([]);
 
@@ -52,23 +59,37 @@ export const ChannelScheduleModal: React.FC<ChannelScheduleModalProps> = ({ chan
     let isMounted = true;
     setLoading(true);
 
+    const targetNorm = normalizeChannelId(channel.id);
+    const matchesChannel = (ch: any) => {
+      if (!ch) return false;
+      if (normalizeChannelId(ch.id) === targetNorm) return true;
+      if (channel.number > 0 && ch.number === channel.number) return true;
+      if (ch.name && channel.name && ch.name.trim().toLowerCase() === channel.name.trim().toLowerCase()) return true;
+      return false;
+    };
+
     const loadChannelSchedule = async () => {
       try {
-        if (activeSubTab === 'stasera') {
+        if (activeSubTab === 'oggi') {
+          const dayProgs = await fetchChannelDayScheduleApi(channel);
+          if (isMounted) {
+            setChannelPrograms(dayProgs);
+          }
+        } else if (activeSubTab === 'stasera') {
           const staseraData = await fetchStaseraProgramsApi();
-          const found = staseraData.find(item => item.channel.id === channel.id);
+          const found = staseraData.find(item => matchesChannel(item.channel));
           if (isMounted) {
             setChannelPrograms(found?.programs || []);
           }
         } else {
           const domaniData = await fetchDomaniProgramsApi();
-          const found = domaniData.find(item => item.channel.id === channel.id);
+          const found = domaniData.find(item => matchesChannel(item.channel));
           if (isMounted) {
             setChannelPrograms(found?.programs || []);
           }
         }
       } catch (err) {
-        console.warn('Error loading channel schedule:', err);
+        console.warn('[ChannelScheduleModal] Errore caricamento palinsesto:', err);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -84,6 +105,7 @@ export const ChannelScheduleModal: React.FC<ChannelScheduleModalProps> = ({ chan
   if (!channel) return null;
 
   const isFav = isFavorite(channel.id);
+  const nowRomeMin = getCurrentRomeMinutes();
 
   return (
     <Modal
@@ -97,18 +119,26 @@ export const ChannelScheduleModal: React.FC<ChannelScheduleModalProps> = ({ chan
           {/* Header */}
           <View style={[styles.sheetHeader, { borderBottomColor: colors.borderSubtle }]}>
             <View style={styles.channelMeta}>
-              {channel.number > 0 && (
-                <View style={[styles.numBadge, { backgroundColor: colors.primary }]}>
-                  <Text style={styles.numText}>LCN {channel.number}</Text>
+              <ChannelLogo
+                logoUrl={channel.logo}
+                channelName={channel.name}
+                size={42}
+                style={{ marginRight: 2 }}
+              />
+
+              <View style={styles.headerTitleWrap}>
+                <View style={styles.titleRow}>
+                  <Text style={[styles.channelTitle, { color: colors.text }]} numberOfLines={1}>
+                    {channel.name}
+                  </Text>
+                  {channel.number > 0 && (
+                    <View style={[styles.numBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.numText}>LCN {channel.number}</Text>
+                    </View>
+                  )}
                 </View>
-              )}
-              {channel.logo ? (
-                <Image source={{ uri: channel.logo }} style={styles.channelLogo} resizeMode="contain" />
-              ) : null}
-              <View>
-                <Text style={[styles.channelTitle, { color: colors.text }]}>{channel.name}</Text>
                 <Text style={[styles.channelSub, { color: colors.textSecondary }]}>
-                  {channel.geo ? `${channel.geo.city} · ${channel.geo.region}` : 'Palinsesto TV'}
+                  {channel.geo ? `${channel.geo.city} (${channel.geo.region})` : 'Guida TV Ufficiale'}
                 </Text>
               </View>
             </View>
@@ -132,7 +162,7 @@ export const ChannelScheduleModal: React.FC<ChannelScheduleModalProps> = ({ chan
             </View>
           </View>
 
-          {/* Action Row */}
+          {/* Direct Live Stream Button */}
           {channel.stream?.url && (
             <View style={styles.streamRow}>
               <TouchableOpacity
@@ -142,14 +172,32 @@ export const ChannelScheduleModal: React.FC<ChannelScheduleModalProps> = ({ chan
               >
                 <Play size={14} color="#ffffff" fill="#ffffff" style={{ marginRight: 6 }} />
                 <Text style={styles.streamFullBtnText}>
-                  Guarda Diretta Streaming Ufficiale ({channel.stream.label || 'Live'})
+                  Guarda Diretta Streaming ({channel.stream.label || 'Live Ufficiale'})
                 </Text>
               </TouchableOpacity>
             </View>
           )}
 
-          {/* Sub Tab Switcher */}
+          {/* Sub Tab Switcher: Oggi 24h, Stasera, Domani */}
           <View style={[styles.tabBar, { backgroundColor: colors.surfaceSubtle }]}>
+            <TouchableOpacity
+              style={[
+                styles.tabBtn,
+                activeSubTab === 'oggi' && { backgroundColor: colors.primary },
+              ]}
+              onPress={() => setActiveSubTab('oggi')}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.tabBtnText,
+                  { color: activeSubTab === 'oggi' ? '#ffffff' : colors.textSecondary },
+                ]}
+              >
+                📺 Oggi (24h)
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[
                 styles.tabBtn,
@@ -164,7 +212,7 @@ export const ChannelScheduleModal: React.FC<ChannelScheduleModalProps> = ({ chan
                   { color: activeSubTab === 'stasera' ? '#ffffff' : colors.textSecondary },
                 ]}
               >
-                🌙 Stasera in TV
+                🌙 Stasera
               </Text>
             </TouchableOpacity>
 
@@ -196,19 +244,39 @@ export const ChannelScheduleModal: React.FC<ChannelScheduleModalProps> = ({ chan
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color={colors.primary} />
                 <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                  Caricamento guida {channel.name}...
+                  Caricamento palinsesto {channel.name}...
                 </Text>
               </View>
             ) : channelPrograms.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <Tv size={32} color={colors.textMuted} style={{ marginBottom: 8 }} />
+                <Tv size={38} color={colors.textMuted} style={{ marginBottom: 12 }} />
                 <Text style={[styles.emptyText, { color: colors.text }]}>
-                  Nessun programma trovato per questa fascia oraria.
+                  Palinsesto non disponibile per {channel.name}
+                </Text>
+                <Text style={[styles.emptySubText, { color: colors.textSecondary }]}>
+                  {channel.stream?.url
+                    ? 'Puoi comunque seguire la trasmissione ufficiale in diretta streaming toccando il pulsante rosso sopra.'
+                    : 'I dati di questa emittente verranno sincronizzati nelle prossime ore.'}
                 </Text>
               </View>
             ) : (
               channelPrograms.map((prog, index) => {
                 const isReminded = hasReminder(prog.id);
+
+                // Calcolo se il programma è in onda adesso nel tab 24h
+                let isCurrentlyLive = false;
+                if (activeSubTab === 'oggi') {
+                  const startMin = getTimeMinutes(prog.startTimeFormatted || prog.startTime);
+                  let endMin = getTimeMinutes(prog.endTimeFormatted || prog.endTime);
+                  if (endMin <= startMin && index + 1 < channelPrograms.length) {
+                    endMin = getTimeMinutes(channelPrograms[index + 1].startTimeFormatted || channelPrograms[index + 1].startTime);
+                  }
+                  if (startMin <= endMin) {
+                    isCurrentlyLive = nowRomeMin >= startMin && nowRomeMin < endMin;
+                  } else {
+                    isCurrentlyLive = nowRomeMin >= startMin || nowRomeMin < endMin;
+                  }
+                }
 
                 return (
                   <TouchableOpacity
@@ -216,8 +284,8 @@ export const ChannelScheduleModal: React.FC<ChannelScheduleModalProps> = ({ chan
                     style={[
                       styles.progItem,
                       {
-                        backgroundColor: colors.card,
-                        borderColor: colors.borderSubtle,
+                        backgroundColor: isCurrentlyLive ? colors.primaryLight + '15' : colors.card,
+                        borderColor: isCurrentlyLive ? colors.primary : colors.borderSubtle,
                       },
                     ]}
                     activeOpacity={0.8}
@@ -236,13 +304,21 @@ export const ChannelScheduleModal: React.FC<ChannelScheduleModalProps> = ({ chan
                   >
                     <View style={styles.progItemLeft}>
                       <View style={styles.timeTag}>
-                        <Clock size={12} color={colors.primary} style={{ marginRight: 4 }} />
-                        <Text style={[styles.timeLabel, { color: colors.text }]}>
+                        <Clock size={12} color={isCurrentlyLive ? colors.primary : colors.textSecondary} style={{ marginRight: 4 }} />
+                        <Text style={[styles.timeLabel, { color: isCurrentlyLive ? colors.primary : colors.text }]}>
                           {prog.startTimeFormatted || 'Orario'}
+                          {prog.endTimeFormatted ? ` - ${prog.endTimeFormatted}` : ''}
                         </Text>
                       </View>
 
-                      {prog.isPrimaSerata && (
+                      {isCurrentlyLive && (
+                        <View style={[styles.liveBadgePill, { backgroundColor: '#dc2626' }]}>
+                          <View style={styles.pulsingDot} />
+                          <Text style={styles.liveBadgePillText}>IN ONDA</Text>
+                        </View>
+                      )}
+
+                      {prog.isPrimaSerata && !isCurrentlyLive && (
                         <View style={[styles.badge, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}>
                           <Text style={[styles.badgeText, { color: colors.primary }]}>Prima Serata</Text>
                         </View>
@@ -313,26 +389,32 @@ const styles = StyleSheet.create({
     marginRight: 10,
     gap: 10,
   },
+  headerTitleWrap: {
+    flex: 1,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
   numBadge: {
     paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingVertical: 1.5,
     borderRadius: 6,
   },
   numText: {
     color: '#ffffff',
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '900',
-  },
-  channelLogo: {
-    width: 32,
-    height: 24,
   },
   channelTitle: {
     fontSize: 16,
     fontWeight: '800',
+    flexShrink: 1,
   },
   channelSub: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '500',
   },
   headerActions: {
@@ -385,7 +467,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   tabBtnText: {
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: '700',
   },
   scrollContent: {
@@ -408,9 +490,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14.5,
+    fontWeight: '700',
     textAlign: 'center',
+    marginBottom: 6,
+  },
+  emptySubText: {
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+    paddingHorizontal: 24,
   },
   progItem: {
     padding: 14,
@@ -421,6 +510,7 @@ const styles = StyleSheet.create({
   progItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 6,
   },
@@ -431,6 +521,26 @@ const styles = StyleSheet.create({
   timeLabel: {
     fontSize: 12,
     fontWeight: '800',
+  },
+  liveBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    gap: 4,
+  },
+  pulsingDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#ffffff',
+  },
+  liveBadgePillText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   badge: {
     paddingHorizontal: 6,
@@ -452,7 +562,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   progTitle: {
-    fontSize: 14.5,
+    fontSize: 15,
     fontWeight: '800',
     marginBottom: 4,
   },

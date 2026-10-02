@@ -10,11 +10,11 @@
  * 1. MULTI-TIER CACHE (RAM + Disk):
  *    - Livello 1 (In-Memory RAM): accesso a 0 ms per cambi di tab istantanei.
  *    - Livello 2 (AsyncStorage Disk): persistenza offline tra riavvii dell'app.
- *    - Livello 3 (Cloudflare Edge CDN): compressione Brotli/Gzip e validazione ETag.
+ *    - Livello 3 (Cloudflare Edge CDN): compressione gzip trasparente via OkHttp.
  * 
- * 2. STALE-WHILE-REVALIDATE PATTERN:
- *    - I componenti UI ottengono immediatamente i dati disponibili dalla memoria.
- *    - Gli aggiornamenti di rete avvengono in background in modo asincrono.
+ * 2. INTEGRAZIONE CON SORRISI & LOCANDINE UFFICIALI:
+ *    - Arricchimento automatico delle locandine da TV Sorrisi e Canzoni e TMDB.
+ *    - Feed "In Onda Ora" sincronizzato in tempo reale per la giornata corrente.
  * 
  * 3. GESTIONE FUSO ORARIO E CONTINUITÀ NOTTURNA (Europe/Rome):
  *    - Risoluzione accurata dell'orario locale italiano (CET/CEST) minuto per minuto.
@@ -22,49 +22,34 @@
  *      in coda alla Prima/Seconda Serata, garantendo la corretta sequenza televisiva.
  * 
  * @module api/client
- * @benchmark Modello di riferimento per architetture EPG / TV Guide su React Native.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Channel, ChannelSchedule, Program } from '../types';
 import { fallbackChannels, fallbackStaseraSchedule } from './mockData';
+import { fetchSorrisiStasera, fetchSorrisiOra, SorrisiProgram, SorrisiLiveEntry } from '../services/sorrisiService';
+import { resolveProgramPoster } from '../utils/programImages';
 
 /** URL base dell'infrastruttura backend (Cloudflare + Astro static/SSR API) */
 const BASE_URL = 'https://www.intvstasera.it';
 
-/** Chiavi di persistenza su disco AsyncStorage (versionate per prevenire schema mismatch) */
+/** Chiavi di persistenza su disco AsyncStorage */
 const CACHE_KEYS = {
-  CHANNELS: '@intv_cache_channels_v3',
-  STASERA: '@intv_cache_stasera_v3',
-  ORA: '@intv_cache_ora_v3',
-  DOMANI: '@intv_cache_domani_v3',
+  CHANNELS: '@intv_cache_channels_v4',
+  STASERA: '@intv_cache_stasera_v4',
+  ORA: '@intv_cache_ora_v4',
+  DOMANI: '@intv_cache_domani_v4',
 };
 
 // ── 1. GESTIONE CACHE IN MEMORIA (RAM) & DISCO (ASYNCSTORAGE) ────────────────
 
-/**
- * Cache in-memory a livello di processo JavaScript.
- * Consente un tempo di recupero di 0.01 ms durante la navigazione tra tab,
- * azzerando il carico di I/O su bridge React Native e SQLite/AsyncStorage.
- */
 const memoryCache: { [key: string]: { data: any; timestamp: number } } = {};
 
-/**
- * Recupera i dati dalla gerarchia di caching:
- * 1. Controlla prima la RAM (memoryCache) -> Ritorno istantaneo (0ms).
- * 2. In caso di cache-miss, carica da AsyncStorage su disco e popola la RAM.
- * 
- * @template T Tipo del dato atteso
- * @param key Chiave univoca di cache
- * @returns I dati tipizzati o null se non presenti
- */
 async function getCached<T>(key: string): Promise<T | null> {
-  // 1. Lettura immediata da RAM
   if (memoryCache[key]) {
     return memoryCache[key].data as T;
   }
 
-  // 2. Lettura di fallback da disco (AsyncStorage)
   try {
     const raw = await AsyncStorage.getItem(key);
     if (!raw) return null;
@@ -76,20 +61,10 @@ async function getCached<T>(key: string): Promise<T | null> {
   }
 }
 
-/**
- * Salva i dati sia nella RAM volatile che sul disco in modo asincrono non bloccante.
- * La scrittura su disco viene accodata tramite `setTimeout(..., 0)` per non
- * sottrarre frame rate (60fps) all'animazione della UI.
- * 
- * @template T Tipo del dato da persistere
- * @param key Chiave univoca di cache
- * @param data Contenuto da salvare
- */
 async function setCached<T>(key: string, data: T): Promise<void> {
   const timestamp = Date.now();
   memoryCache[key] = { data, timestamp };
 
-  // Scrittura asincrona disaccoppiata dal ciclo di render
   setTimeout(async () => {
     try {
       await AsyncStorage.setItem(key, JSON.stringify({ timestamp, data }));
@@ -99,17 +74,44 @@ async function setCached<T>(key: string, data: T): Promise<void> {
   }, 0);
 }
 
-// ── 2. UTILITY TEMPORALI & LOGICA DI ORDINAMENTO PALINSESTI ─────────────────
+/**
+ * Normalizza un ID di canale rimuovendo trattini, caratteri speciali e spazi
+ */
+export function normalizeChannelId(id?: string | null): string {
+  if (!id) return '';
+  return String(id).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
 
 /**
- * Calcola i minuti trascorsi dalla mezzanotte di Roma per un timestamp ISO 8601.
- * Gestisce automaticamente l'ora solare e l'ora legale (CET/CEST Europe/Rome).
- * 
- * Esempio: "2026-09-29T21:15:00Z" -> 21 * 60 + 15 = 1275 minuti.
- * 
- * @param isoString Stringa data ISO 8601
- * @returns Minuti da mezzanotte (0 - 1439)
+ * Converte un URL o percorso di logo relativo nel percorso CDN assoluto di intvstasera.it
  */
+export function resolveLogoUrl(logo?: string | null): string | null {
+  if (!logo) return null;
+  const trimmed = String(logo).trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('/')) {
+    return `${BASE_URL}${trimmed}`;
+  }
+  return `${BASE_URL}/channel-logos/${trimmed}`;
+}
+
+/**
+ * Converte una stringa di orario (es. "14:30" o ISO 8601) in minuti da mezzanotte di Roma (0-1439).
+ */
+export function getTimeMinutes(timeStrOrIso?: string | null): number {
+  if (!timeStrOrIso) return 0;
+  const str = String(timeStrOrIso).trim();
+  
+  if (/^\d{1,2}:\d{2}$/.test(str)) {
+    const [h, m] = str.split(':');
+    return (parseInt(h, 10) % 24) * 60 + parseInt(m, 10);
+  }
+  
+  return getMinutesFromRomeMidnight(str);
+}
+
 export function getMinutesFromRomeMidnight(isoString: string): number {
   try {
     const d = new Date(isoString);
@@ -129,12 +131,6 @@ export function getMinutesFromRomeMidnight(isoString: string): number {
   }
 }
 
-/**
- * Restituisce i minuti correnti trascorsi dalla mezzanotte nel fuso orario di Roma.
- * Utilizzato per il calcolo in tempo reale del programma in onda ("In Onda Ora").
- * 
- * @returns Minuti correnti a Roma (0 - 1439)
- */
 export function getCurrentRomeMinutes(): number {
   try {
     const now = new Date();
@@ -156,22 +152,15 @@ export function getCurrentRomeMinutes(): number {
 
 /**
  * Ordina i programmi serali preservando la naturale continuità televisiva:
- * - Fascia 1: Prima Serata (dalle 20:30 alle 23:00) -> In cima alla lista
- * - Fascia 2: Seconda Serata (dalle 23:00 alle 23:59) -> Segue la prima serata
- * - Fascia 3: Notte (dalle 00:00 alle 05:59) -> Spostata in coda dopo le 23:59 (+1440 min)
- * 
- * Evita il bug tipico delle guide TV in cui un programma delle 00:30 finiva in cima
- * prima del programma delle 21:15.
- * 
- * @param programs Lista di programmi grezzi del canale
- * @returns Lista ordinata cronologicamente per la serata
+ * - Prima Serata (20:30 - 23:00)
+ * - Seconda Serata (23:00 - 23:59)
+ * - Notte (00:00 - 05:59) traslata di +1440 min
  */
 function sortEveningPrograms(programs: Program[]): Program[] {
   return [...programs].sort((a, b) => {
-    const minA = getMinutesFromRomeMidnight(a.startTime);
-    const minB = getMinutesFromRomeMidnight(b.startTime);
+    const minA = getTimeMinutes(a.startTimeFormatted || a.startTime);
+    const minB = getTimeMinutes(b.startTimeFormatted || b.startTime);
 
-    // I programmi dopo mezzanotte (00:00-05:59) vengono traslati di 24h (+1440 minuti)
     const orderA = minA < 6 * 60 ? minA + 24 * 60 : minA;
     const orderB = minB < 6 * 60 ? minB + 24 * 60 : minB;
 
@@ -179,21 +168,13 @@ function sortEveningPrograms(programs: Program[]): Program[] {
   });
 }
 
-// ── 3. CHIAMATE API CON COMPRESSIONE HTTP & FALLBACK RESILIENTE ──────────────
+// ── 3. CHIAMATE API CON FALLBACK E ARRICCHIMENTO LOCANDINE ──────────────────
 
 /**
- * Recupera l'elenco completo dei canali TV (Nazionali, Locali, Tematici).
- * 
- * Strategia:
- * 1. Restituisce subito la RAM se disponibile.
- * 2. Esegue fetch con header di compressione `Accept-Encoding: gzip, deflate, br`.
- * 3. In caso di offline totale, ricorre ai mock data inclusi nel bundle.
- * 
- * @param forceRefresh Se true, forza la richiesta HTTP ignorando la RAM
- * @returns Array di canali TV
+ * Recupera l'elenco completo dei canali TV.
+ * NOTA: Non impostiamo Accept-Encoding manuale per consentire a OkHttp di gestire la decompressione.
  */
 export async function fetchChannelsApi(forceRefresh = false): Promise<Channel[]> {
-  // Stale-While-Revalidate: ritorno immediato da memoria se già caricato
   if (!forceRefresh && memoryCache[CACHE_KEYS.CHANNELS]) {
     return memoryCache[CACHE_KEYS.CHANNELS].data;
   }
@@ -202,32 +183,32 @@ export async function fetchChannelsApi(forceRefresh = false): Promise<Channel[]>
 
   try {
     const response = await fetch(`${BASE_URL}/api/channels.json`, {
-      headers: {
-        Accept: 'application/json',
-        'Accept-Encoding': 'gzip, deflate, br',
-      },
+      headers: { Accept: 'application/json' },
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const json = await response.json();
     if (json.channels && Array.isArray(json.channels) && json.channels.length > 0) {
-      await setCached(CACHE_KEYS.CHANNELS, json.channels);
-      return json.channels;
+      const resolvedChannels: Channel[] = json.channels.map((ch: Channel) => ({
+        ...ch,
+        logo: resolveLogoUrl(ch.logo) || ch.logo,
+      }));
+      await setCached(CACHE_KEYS.CHANNELS, resolvedChannels);
+      return resolvedChannels;
     }
   } catch (error) {
-    console.warn('[API] Errore fetch canali, fallback su cache locale:', error);
+    console.warn('[API] Errore fetch canali, fallback su cache/mock:', error);
   }
 
   if (cached && cached.length > 0) return cached;
-  return fallbackChannels;
+  return fallbackChannels.map(ch => ({
+    ...ch,
+    logo: resolveLogoUrl(ch.logo) || ch.logo,
+  }));
 }
 
 /**
  * Recupera i programmi di stasera in TV (Prima e Seconda Serata).
- * I dati vengono pre-elaborati applicando il sorting cronologico e assegnando
- * i flag `isPrimaSerata` e `isSecondaSerata`.
- * 
- * @param forceRefresh Se true, effettua una nuova richiesta alla rete
- * @returns Palinsesto serale per ciascun canale
+ * Arricchisce automaticamente ogni programma con locandine ufficiali da Sorrisi o TMDB.
  */
 export async function fetchStaseraProgramsApi(forceRefresh = false): Promise<ChannelSchedule[]> {
   if (!forceRefresh && memoryCache[CACHE_KEYS.STASERA]) {
@@ -237,29 +218,109 @@ export async function fetchStaseraProgramsApi(forceRefresh = false): Promise<Cha
   const cached = await getCached<ChannelSchedule[]>(CACHE_KEYS.STASERA);
 
   try {
-    const response = await fetch(`${BASE_URL}/api/programs/stasera.json`, {
-      headers: {
-        Accept: 'application/json',
-        'Accept-Encoding': 'gzip, deflate, br',
-      },
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const json = await response.json();
-    if (json.schedule && Array.isArray(json.schedule) && json.schedule.length > 0) {
+    // Eseguiamo il fetch dell'API principale e contemporaneamente i dati Sorrisi per le locandine fresche
+    const [apiRes, sorrisiList] = await Promise.allSettled([
+      fetch(`${BASE_URL}/api/programs/stasera.json`, {
+        headers: { Accept: 'application/json' },
+      }).then(r => (r.ok ? r.json() : null)),
+      fetchSorrisiStasera(),
+    ]);
+
+    const sorrisiData = sorrisiList.status === 'fulfilled' ? sorrisiList.value : [];
+    const sorrisiImageMap = new Map<string, string>();
+    for (const sp of sorrisiData) {
+      if (sp.imageUrl) {
+        const key = `${sp.channelId}_${sp.title.toLowerCase().trim()}`;
+        sorrisiImageMap.set(key, sp.imageUrl);
+        sorrisiImageMap.set(sp.title.toLowerCase().trim(), sp.imageUrl);
+      }
+    }
+
+    const json = apiRes.status === 'fulfilled' ? apiRes.value : null;
+
+    if (json?.schedule && Array.isArray(json.schedule) && json.schedule.length > 0) {
       const sortedSchedule: ChannelSchedule[] = json.schedule.map((entry: ChannelSchedule) => {
+        const chNorm = normalizeChannelId(entry.channel.id);
         const sortedProgs = sortEveningPrograms(entry.programs || []);
+
         return {
           ...entry,
-          programs: sortedProgs.map((p, idx) => ({
-            ...p,
-            isPrimaSerata: idx === 0,
-            isSecondaSerata: idx === 1,
-          })),
+          channel: {
+            ...entry.channel,
+            logo: resolveLogoUrl(entry.channel.logo) || entry.channel.logo,
+          },
+          programs: sortedProgs.map((p, idx) => {
+            const cleanTitle = (p.title || '').toLowerCase().trim();
+            const sorrisiImg =
+              sorrisiImageMap.get(`${chNorm}_${cleanTitle}`) ||
+              sorrisiImageMap.get(cleanTitle) ||
+              null;
+
+            const finalPoster =
+              sorrisiImg ||
+              resolveProgramPoster(p.posterUrl, p.title, p.category, p.description);
+
+            return {
+              ...p,
+              channelId: entry.channel.id,
+              channelName: entry.channel.name,
+              channelLogo: resolveLogoUrl(p.channelLogo || entry.channel.logo) || undefined,
+              posterUrl: finalPoster,
+              isPrimaSerata: idx === 0,
+              isSecondaSerata: idx === 1,
+            };
+          }),
         };
       });
 
       await setCached(CACHE_KEYS.STASERA, sortedSchedule);
       return sortedSchedule;
+    }
+
+    // Se l'API principale non risponde ma abbiamo Sorrisi, costruiamo il palinsesto dai dati Sorrisi
+    if (sorrisiData.length > 0) {
+      const scheduleByChannel = new Map<string, Program[]>();
+      const channelInfoMap = new Map<string, { id: string; name: string; logo: string }>();
+
+      for (const sp of sorrisiData) {
+        const chId = sp.channelId;
+        if (!channelInfoMap.has(chId)) {
+          channelInfoMap.set(chId, {
+            id: chId,
+            name: sp.channelName,
+            logo: resolveLogoUrl(`${chId}.svg`) || `${chId}.svg`,
+          });
+        }
+
+        const list = scheduleByChannel.get(chId) || [];
+        list.push({
+          id: `sorrisi_${chId}_${list.length + 1}`,
+          title: sp.title,
+          category: sp.category,
+          startTime: new Date().toISOString(),
+          endTime: new Date().toISOString(),
+          startTimeFormatted: sp.timeFormatted,
+          posterUrl: sp.imageUrl || resolveProgramPoster(null, sp.title, sp.category),
+          isPrimaSerata: sp.isPrimaSerata ?? (list.length === 0),
+          isSecondaSerata: list.length === 1,
+        });
+        scheduleByChannel.set(chId, list);
+      }
+
+      const sorrisiSchedules: ChannelSchedule[] = Array.from(channelInfoMap.entries()).map(([chId, chInfo]) => ({
+        channel: {
+          id: chId,
+          name: chInfo.name,
+          number: 0,
+          logo: chInfo.logo,
+        },
+        programs: scheduleByChannel.get(chId) || [],
+      }));
+
+      if (sorrisiSchedules.length > 0) {
+        await setCached(CACHE_KEYS.STASERA, sorrisiSchedules);
+        return sorrisiSchedules;
+      }
     }
   } catch (error) {
     console.warn('[API] Errore fetch stasera, fallback su cache locale:', error);
@@ -271,12 +332,7 @@ export async function fetchStaseraProgramsApi(forceRefresh = false): Promise<Cha
 
 /**
  * Recupera i programmi in onda adesso su tutte le emittenti.
- * I dati grezzi vengono trasformati in tempo reale determinando:
- * - `currentProgram`: programma attualmente in trasmissione.
- * - `nextProgram`: programma successivo con orario di inizio.
- * 
- * @param forceRefresh Se true, richiede i dati freschi al server
- * @returns Lista canali con programma in onda e successivo
+ * Sincronizza i dati live di `ora.json` e li arricchisce con le trasmissioni in diretta da Sorrisi.
  */
 export async function fetchOraProgramsApi(forceRefresh = false): Promise<{
   channel: Channel;
@@ -284,20 +340,118 @@ export async function fetchOraProgramsApi(forceRefresh = false): Promise<{
   nextProgram: Program | null;
   allPrograms: Program[];
 }[]> {
+  if (!forceRefresh && memoryCache[CACHE_KEYS.ORA]) {
+    return processLivePrograms(memoryCache[CACHE_KEYS.ORA].data);
+  }
+
   const cached = await getCached<any[]>(CACHE_KEYS.ORA);
 
   try {
-    const response = await fetch(`${BASE_URL}/api/programs/ora.json`, {
-      headers: {
-        Accept: 'application/json',
-        'Accept-Encoding': 'gzip, deflate, br',
-      },
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const json = await response.json();
-    if (json.channels && Array.isArray(json.channels) && json.channels.length > 0) {
-      await setCached(CACHE_KEYS.ORA, json.channels);
-      return processLivePrograms(json.channels);
+    const [apiRes, sorrisiLive] = await Promise.allSettled([
+      fetch(`${BASE_URL}/api/programs/ora.json`, {
+        headers: { Accept: 'application/json' },
+      }).then(r => (r.ok ? r.json() : null)),
+      fetchSorrisiOra(),
+    ]);
+
+    const json = apiRes.status === 'fulfilled' ? apiRes.value : null;
+    const sorrisiItems = sorrisiLive.status === 'fulfilled' ? sorrisiLive.value : [];
+
+    let channelsData = json?.channels && Array.isArray(json.channels) && json.channels.length > 0
+      ? json.channels
+      : (cached && cached.length > 0 ? cached : null);
+
+    if (channelsData) {
+      // Arricchisci i canali principali con l'evento in onda adesso da Sorrisi (garantisce trasmissione odierna in tempo reale)
+      if (sorrisiItems.length > 0) {
+        const sorrisiMap = new Map<string, SorrisiLiveEntry>();
+        for (const s of sorrisiItems) {
+          sorrisiMap.set(s.channelId, s);
+        }
+
+        channelsData = channelsData.map((item: any) => {
+          const chId = normalizeChannelId(item.channel?.id);
+          const sorrisiLiveEntry = sorrisiMap.get(chId);
+          if (!sorrisiLiveEntry) return item;
+
+          // Se Sorrisi ha l'evento in onda per questo canale, lo inseriamo come programma in onda
+          const sorrisiCurrent: Program = {
+            id: `live_${chId}_now`,
+            title: sorrisiLiveEntry.current.title,
+            category: sorrisiLiveEntry.current.category,
+            startTime: new Date().toISOString(),
+            endTime: new Date(Date.now() + 3600000).toISOString(),
+            startTimeFormatted: sorrisiLiveEntry.current.timeFormatted,
+            posterUrl: sorrisiLiveEntry.current.imageUrl || resolveProgramPoster(null, sorrisiLiveEntry.current.title, sorrisiLiveEntry.current.category),
+          };
+
+          const sorrisiNext: Program | null = sorrisiLiveEntry.next ? {
+            id: `live_${chId}_next`,
+            title: sorrisiLiveEntry.next.title,
+            category: sorrisiLiveEntry.next.category,
+            startTime: new Date(Date.now() + 3600000).toISOString(),
+            endTime: new Date(Date.now() + 7200000).toISOString(),
+            startTimeFormatted: sorrisiLiveEntry.next.timeFormatted,
+            posterUrl: sorrisiLiveEntry.next.imageUrl || resolveProgramPoster(null, sorrisiLiveEntry.next.title, sorrisiLiveEntry.next.category),
+          } : null;
+
+          return {
+            ...item,
+            _overrideCurrent: sorrisiCurrent,
+            _overrideNext: sorrisiNext,
+          };
+        });
+      }
+
+      await setCached(CACHE_KEYS.ORA, channelsData);
+      return processLivePrograms(channelsData);
+    }
+
+    // Se l'API principale è offline ma abbiamo Sorrisi Ora
+    if (sorrisiItems.length > 0) {
+      const liveFromSorrisi = sorrisiItems.map(item => {
+        const ch = fallbackChannels.find(c => normalizeChannelId(c.id) === item.channelId) || {
+          id: item.channelId,
+          name: item.channelName,
+          number: 0,
+          logo: resolveLogoUrl(`${item.channelId}.svg`) || `${item.channelId}.svg`,
+        };
+
+        const currentProg: Program = {
+          id: `live_${item.channelId}_now`,
+          title: item.current.title,
+          category: item.current.category,
+          startTime: new Date().toISOString(),
+          endTime: new Date(Date.now() + 3600000).toISOString(),
+          startTimeFormatted: item.current.timeFormatted,
+          posterUrl: item.current.imageUrl || resolveProgramPoster(null, item.current.title, item.current.category),
+          channelId: ch.id,
+          channelName: ch.name,
+          channelLogo: ch.logo,
+        };
+
+        const nextProg: Program | null = item.next ? {
+          id: `live_${item.channelId}_next`,
+          title: item.next.title,
+          category: item.next.category,
+          startTime: new Date(Date.now() + 3600000).toISOString(),
+          endTime: new Date(Date.now() + 7200000).toISOString(),
+          startTimeFormatted: item.next.timeFormatted,
+          posterUrl: item.next.imageUrl || resolveProgramPoster(null, item.next.title, item.next.category),
+          channelId: ch.id,
+          channelName: ch.name,
+          channelLogo: ch.logo,
+        } : null;
+
+        return {
+          channel: ch,
+          currentProgram: currentProg,
+          nextProgram: nextProg,
+          allPrograms: [currentProg, ...(nextProg ? [nextProg] : [])],
+        };
+      });
+
+      return liveFromSorrisi;
     }
   } catch (error) {
     console.warn('[API] Errore fetch ora, fallback su cache locale:', error);
@@ -307,19 +461,16 @@ export async function fetchOraProgramsApi(forceRefresh = false): Promise<{
     return processLivePrograms(cached);
   }
 
-  return [];
+  // Fallback con programmi del mock arricchiti
+  return processLivePrograms(fallbackStaseraSchedule.map(s => ({
+    channel: s.channel,
+    programs: s.programs,
+  })));
 }
 
 /**
- * Algoritmo deterministico a 3 stadi per individuare il programma in onda adesso:
- * 
- * 1. Match Esatto UTC Timestamp: controlla se `nowSec` ricade nell'intervallo `[startSec, endSec]`.
- * 2. Match per Orario Locale di Roma: se i timestamp UTC differiscono per data,
- *    confronta i minuti del giorno a Roma gestendo i programmi che scavalcano la mezzanotte.
- * 3. Match di Prossimità Minima: se il canale ha buchi nel palinsesto, assegna l'evento più vicino.
- * 
- * @param rawChannels Canali con array di programmi giornalieri
- * @returns Dati strutturati per la card live
+ * Algoritmo per individuare il programma attualmente in onda.
+ * Evita di assegnare programmi serali (20:30) durante il giorno (14:30).
  */
 export function processLivePrograms(rawChannels: any[]): {
   channel: Channel;
@@ -327,12 +478,27 @@ export function processLivePrograms(rawChannels: any[]): {
   nextProgram: Program | null;
   allPrograms: Program[];
 }[] {
-  const now = new Date();
-  const nowSec = Math.floor(now.getTime() / 1000);
   const nowRomeMinutes = getCurrentRomeMinutes();
 
   return rawChannels.map(item => {
-    const ch: Channel = item.channel;
+    const rawCh = item.channel || {};
+    const ch: Channel = {
+      ...rawCh,
+      logo: resolveLogoUrl(rawCh.logo) || rawCh.logo,
+      streamUrl: rawCh.stream?.url || (rawCh as any).streamUrl || undefined,
+      streamLabel: rawCh.stream?.label || (rawCh as any).streamLabel || undefined,
+    };
+
+    // Se presente un override live verificato da Sorrisi, lo applichiamo prioritariamente
+    if (item._overrideCurrent) {
+      return {
+        channel: ch,
+        currentProgram: item._overrideCurrent,
+        nextProgram: item._overrideNext || null,
+        allPrograms: [item._overrideCurrent, ...(item._overrideNext ? [item._overrideNext] : [])],
+      };
+    }
+
     const rawProgs = item.programs || [];
 
     const programs: Program[] = rawProgs.map((p: any) => ({
@@ -341,41 +507,37 @@ export function processLivePrograms(rawChannels: any[]): {
       channelName: ch.name,
       channelLogo: ch.logo,
       channelNumber: ch.number,
-      streamUrl: ch.stream?.url || ch.streamUrl || undefined,
-      streamLabel: ch.stream?.label || ch.streamLabel || undefined,
+      posterUrl: resolveProgramPoster(p.posterUrl, p.title, p.category, p.description),
+      streamUrl: ch.stream?.url || (ch as any).streamUrl || undefined,
+      streamLabel: ch.stream?.label || (ch as any).streamLabel || undefined,
     }));
 
-    // Ordina tutti i programmi della giornata in ordine cronologico
-    programs.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    // Ordina tutti i programmi in ordine cronologico d'inizio
+    programs.sort((a, b) => {
+      const minA = getTimeMinutes(a.startTimeFormatted || a.startTime);
+      const minB = getTimeMinutes(b.startTimeFormatted || b.startTime);
+      return minA - minB;
+    });
 
     let currentProgram: Program | null = null;
     let nextProgram: Program | null = null;
 
-    // ── STADIO 1: Match Esatto su Timestamp UTC ─────────────────────────────
-    for (let i = 0; i < programs.length; i++) {
-      const p = programs[i];
-      const start = p.startSec || Math.floor(new Date(p.startTime).getTime() / 1000);
-      const end = p.endSec || Math.floor(new Date(p.endTime).getTime() / 1000);
-
-      if (start <= nowSec && end > nowSec) {
-        currentProgram = p;
-        nextProgram = programs[i + 1] || null;
-        break;
-      }
-    }
-
-    // ── STADIO 2: Match su Minuti del Giorno a Roma (con scavalcamento 00:00) ─
-    if (!currentProgram && programs.length > 0) {
+    if (programs.length > 0) {
       for (let i = 0; i < programs.length; i++) {
         const p = programs[i];
-        const startMin = getMinutesFromRomeMidnight(p.startTime);
-        const endMin = getMinutesFromRomeMidnight(p.endTime);
+        const startMin = getTimeMinutes(p.startTimeFormatted || p.startTime);
+        let endMin = getTimeMinutes(p.endTimeFormatted || p.endTime);
+        
+        if (endMin <= startMin && i + 1 < programs.length) {
+          const nextStart = getTimeMinutes(programs[i + 1].startTimeFormatted || programs[i + 1].startTime);
+          endMin = nextStart > startMin ? nextStart : startMin + 60;
+        }
 
         let isLive = false;
         if (startMin <= endMin) {
           isLive = nowRomeMinutes >= startMin && nowRomeMinutes < endMin;
         } else {
-          // Programma che inizia la sera e termina dopo mezzanotte (es. 23:30 - 01:15)
+          // Programma a cavallo di mezzanotte
           isLive = nowRomeMinutes >= startMin || nowRomeMinutes < endMin;
         }
 
@@ -385,22 +547,26 @@ export function processLivePrograms(rawChannels: any[]): {
           break;
         }
       }
-    }
 
-    // ── STADIO 3: Fallback Programma più Vicino ─────────────────────────────
-    if (!currentProgram && programs.length > 0) {
-      let closestIdx = 0;
-      let minDiff = 9999;
-      for (let i = 0; i < programs.length; i++) {
-        const startMin = getMinutesFromRomeMidnight(programs[i].startTime);
-        const diff = Math.abs(nowRomeMinutes - startMin);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestIdx = i;
+      // Se non ancora trovato per buco nel palinsesto, cerca solo tra i programmi già iniziati (entro 3 ore fa)
+      if (!currentProgram) {
+        let bestIdx = -1;
+        let maxStartBeforeNow = -1;
+
+        for (let i = 0; i < programs.length; i++) {
+          const startMin = getTimeMinutes(programs[i].startTimeFormatted || programs[i].startTime);
+          if (startMin <= nowRomeMinutes && startMin > maxStartBeforeNow) {
+            maxStartBeforeNow = startMin;
+            bestIdx = i;
+          }
+        }
+
+        // Se un programma è iniziato prima di ora ed è entro 180 minuti, consideralo ancora in onda
+        if (bestIdx !== -1 && (nowRomeMinutes - maxStartBeforeNow) <= 180) {
+          currentProgram = programs[bestIdx];
+          nextProgram = programs[bestIdx + 1] || null;
         }
       }
-      currentProgram = programs[closestIdx];
-      nextProgram = programs[closestIdx + 1] || null;
     }
 
     return {
@@ -414,10 +580,6 @@ export function processLivePrograms(rawChannels: any[]): {
 
 /**
  * Recupera i programmi di domani in TV (Prima e Seconda Serata).
- * Sfrutta il payload ottimizzato a ~150 KB per caricamento immediato.
- * 
- * @param forceRefresh Se true, richiede i dati freschi alla rete
- * @returns Palinsesto serale di domani
  */
 export async function fetchDomaniProgramsApi(forceRefresh = false): Promise<ChannelSchedule[]> {
   if (!forceRefresh && memoryCache[CACHE_KEYS.DOMANI]) {
@@ -428,10 +590,7 @@ export async function fetchDomaniProgramsApi(forceRefresh = false): Promise<Chan
 
   try {
     const response = await fetch(`${BASE_URL}/api/programs/domani.json`, {
-      headers: {
-        Accept: 'application/json',
-        'Accept-Encoding': 'gzip, deflate, br',
-      },
+      headers: { Accept: 'application/json' },
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const json = await response.json();
@@ -440,8 +599,14 @@ export async function fetchDomaniProgramsApi(forceRefresh = false): Promise<Chan
         const sortedProgs = sortEveningPrograms(entry.programs || []);
         return {
           ...entry,
+          channel: {
+            ...entry.channel,
+            logo: resolveLogoUrl(entry.channel.logo) || entry.channel.logo,
+          },
           programs: sortedProgs.map((p, idx) => ({
             ...p,
+            channelLogo: resolveLogoUrl(p.channelLogo || entry.channel.logo) || undefined,
+            posterUrl: resolveProgramPoster(p.posterUrl, p.title, p.category, p.description),
             isPrimaSerata: idx === 0,
             isSecondaSerata: idx === 1,
           })),
@@ -456,5 +621,39 @@ export async function fetchDomaniProgramsApi(forceRefresh = false): Promise<Chan
   }
 
   if (cached && cached.length > 0) return cached;
+  return fallbackStaseraSchedule;
+}
+
+/**
+ * Recupera il palinsesto completo 24 ore di oggi per un canale specifico.
+ */
+export async function fetchChannelDayScheduleApi(channel: Channel): Promise<Program[]> {
+  if (!channel) return [];
+  const targetNorm = normalizeChannelId(channel.id);
+
+  const matchesChannel = (ch: any) => {
+    if (!ch) return false;
+    if (normalizeChannelId(ch.id) === targetNorm) return true;
+    if (channel.number > 0 && ch.number === channel.number) return true;
+    if (ch.name && channel.name && ch.name.trim().toLowerCase() === channel.name.trim().toLowerCase()) return true;
+    return false;
+  };
+
+  try {
+    const oraData = await fetchOraProgramsApi();
+    const foundOra = oraData.find(item => matchesChannel(item.channel));
+    if (foundOra && foundOra.allPrograms && foundOra.allPrograms.length > 0) {
+      return foundOra.allPrograms;
+    }
+
+    const staseraData = await fetchStaseraProgramsApi();
+    const foundStasera = staseraData.find(item => matchesChannel(item.channel));
+    if (foundStasera && foundStasera.programs && foundStasera.programs.length > 0) {
+      return foundStasera.programs;
+    }
+  } catch (err) {
+    console.warn('[API] Errore caricamento palinsesto 24h del canale:', err);
+  }
+
   return [];
 }

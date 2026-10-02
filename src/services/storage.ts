@@ -35,7 +35,7 @@ const STORAGE_KEYS = {
 export async function getFavoriteChannelIds(): Promise<string[]> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEYS.FAVORITES);
-    if (!raw) return ['rai-1', 'canale-5', 'italia-1', 'la7', 'tv8', 'nove', '20'];
+    if (!raw) return [];
     return JSON.parse(raw);
   } catch {
     return [];

@@ -27,9 +27,10 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { useColorScheme } from 'react-native';
 import { CategoryType, TabType, Program, ReminderItem, Channel } from '../types';
 import { darkTheme, lightTheme, ThemeColors } from '../theme/colors';
-import { getFavoriteChannelIds, toggleFavoriteChannelId, getSavedReminders, addReminder, removeReminder } from '../services/storage';
+import { getFavoriteChannelIds, saveFavoriteChannelIds, getSavedReminders, addReminder, removeReminder } from '../services/storage';
 import { scheduleProgramReminder, cancelProgramReminder } from '../services/notifications';
 import { trackAppOpen, trackSelectProgram, trackReminder } from '../services/analytics';
+import { normalizeChannelId } from '../api/client';
 
 /** Interfaccia contrattuale dello stato globale e delle relative mutazioni */
 interface AppContextType {
@@ -109,13 +110,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   /** Alterna la presenza di un canale nei preferiti e aggiorna la persistenza */
   const toggleFavorite = async (channelId: string) => {
-    const updated = await toggleFavoriteChannelId(channelId);
+    if (!channelId) return;
+    const targetNorm = normalizeChannelId(channelId);
+    const exists = favorites.some(fav => normalizeChannelId(fav) === targetNorm);
+    const updated = exists
+      ? favorites.filter(fav => normalizeChannelId(fav) !== targetNorm)
+      : [...favorites, channelId];
     setFavorites(updated);
+    await saveFavoriteChannelIds(updated);
   };
 
-  /** Verifica se il canale è marcato come preferito */
+  /** Verifica se il canale è marcato come preferito tramite confronto normalizzato */
   const isFavorite = (channelId: string) => {
-    return favorites.includes(channelId);
+    if (!channelId) return false;
+    const targetNorm = normalizeChannelId(channelId);
+    return favorites.some(fav => normalizeChannelId(fav) === targetNorm);
   };
 
   /** Verifica se un programma possiede una notifica programmata */

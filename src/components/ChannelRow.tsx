@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { Channel } from '../types';
 import { openLiveStream } from '../services/streaming';
+import { ChannelLogo } from './ChannelLogo';
 import { Play, Heart, MapPin } from 'lucide-react-native';
 
 interface ChannelRowProps {
@@ -27,27 +28,31 @@ export const ChannelRow: React.FC<ChannelRowProps> = ({ channel, onPress }) => {
       ]}
     >
       <View style={styles.left}>
-        {channel.number > 0 && (
-          <View style={[styles.numberBadge, { backgroundColor: colors.surfaceSubtle }]}>
-            <Text style={[styles.numberText, { color: colors.textSecondary }]}>
-              {channel.number}
-            </Text>
-          </View>
-        )}
-
-        {channel.logo ? (
-          <Image source={{ uri: channel.logo }} style={styles.logo} resizeMode="contain" />
-        ) : (
-          <View style={[styles.fallbackLogo, { backgroundColor: colors.primary }]}>
-            <Text style={styles.fallbackLogoText}>{channel.name.slice(0, 2)}</Text>
-          </View>
-        )}
+        {/* Icona/Logo del Canale ad alta visibilità */}
+        <ChannelLogo
+          logoUrl={channel.logo}
+          channelName={channel.name}
+          size={42}
+          style={styles.logoContainer}
+        />
 
         <View style={styles.info}>
-          <Text style={[styles.name, { color: colors.text }]}>{channel.name}</Text>
+          <View style={styles.nameRow}>
+            <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
+              {channel.name}
+            </Text>
+            {channel.number > 0 && (
+              <View style={[styles.lcnPill, { backgroundColor: colors.surfaceSubtle }]}>
+                <Text style={[styles.lcnPillText, { color: colors.textSecondary }]}>
+                  {channel.number}
+                </Text>
+              </View>
+            )}
+          </View>
+
           {channel.geo ? (
             <View style={styles.geoRow}>
-              <MapPin size={10} color={colors.primary} style={{ marginRight: 3 }} />
+              <MapPin size={11} color={colors.primary} style={{ marginRight: 3 }} />
               <Text style={[styles.geoText, { color: colors.textSecondary }]} numberOfLines={1}>
                 {channel.geo.city} ({channel.geo.region})
                 {channel.geo.badge ? ` · ${channel.geo.badge}` : ''}
@@ -55,7 +60,7 @@ export const ChannelRow: React.FC<ChannelRowProps> = ({ channel, onPress }) => {
             </View>
           ) : (
             <Text style={[styles.typeText, { color: colors.textMuted }]}>
-              {channel.type || 'Nazionale'} · Tocca per palinsesto
+              {channel.type || 'Nazionale'} · Tocca per palinsesto 24h
             </Text>
           )}
         </View>
@@ -75,11 +80,11 @@ export const ChannelRow: React.FC<ChannelRowProps> = ({ channel, onPress }) => {
 
         <TouchableOpacity
           onPress={() => toggleFavorite(channel.id)}
-          hitSlop={10}
+          hitSlop={12}
           style={styles.favBtn}
         >
           <Heart
-            size={18}
+            size={19}
             color={isFav ? '#ef4444' : colors.textMuted}
             fill={isFav ? '#ef4444' : 'transparent'}
           />
@@ -107,60 +112,50 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 10,
   },
-  numberBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginRight: 10,
-    minWidth: 28,
-    alignItems: 'center',
-  },
-  numberText: {
-    fontSize: 10.5,
-    fontWeight: '800',
-  },
-  logo: {
-    width: 32,
-    height: 24,
-    marginRight: 10,
-  },
-  fallbackLogo: {
-    width: 32,
-    height: 24,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  fallbackLogoText: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: '900',
+  logoContainer: {
+    marginRight: 12,
   },
   info: {
     flex: 1,
+    justifyContent: 'center',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 3,
+    gap: 6,
   },
   name: {
-    fontSize: 14.5,
+    fontSize: 15,
     fontWeight: '700',
-    marginBottom: 2,
+    flexShrink: 1,
+  },
+  lcnPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+  },
+  lcnPillText: {
+    fontSize: 10,
+    fontWeight: '800',
   },
   geoRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   geoText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '500',
   },
   typeText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '500',
   },
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    marginLeft: 6,
   },
   streamBtn: {
     flexDirection: 'row',
@@ -175,6 +170,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   favBtn: {
-    padding: 4,
+    padding: 6,
   },
 });

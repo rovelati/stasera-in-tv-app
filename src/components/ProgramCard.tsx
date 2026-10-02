@@ -22,7 +22,9 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions } from 'rea
 import { useApp } from '../context/AppContext';
 import { Program, Channel } from '../types';
 import { openLiveStream } from '../services/streaming';
-import { Bell, Play, Film, Tv, Trophy, Sparkles, Clock, Heart } from 'lucide-react-native';
+import { ChannelLogo } from './ChannelLogo';
+import { Bell, Play, Film, Tv, Trophy, Sparkles, Clock, Heart, Radio } from 'lucide-react-native';
+import { resolveProgramPoster } from '../utils/programImages';
 
 interface ProgramCardProps {
   program: Program;
@@ -33,9 +35,17 @@ const { width } = Dimensions.get('window');
 
 export const ProgramCard: React.FC<ProgramCardProps> = ({ program, channel }) => {
   const { colors, toggleReminder, hasReminder, toggleFavorite, isFavorite, setSelectedProgram } = useApp();
+  const [imageError, setImageError] = React.useState<boolean>(false);
 
   const isFav = isFavorite(channel.id);
   const isReminded = hasReminder(program.id);
+
+  const posterUri = resolveProgramPoster(
+    program.posterUrl,
+    program.title,
+    program.category,
+    program.description
+  );
 
   const getCategoryBadgeStyle = (cat?: string) => {
     const c = (cat || '').toLowerCase();
@@ -69,6 +79,15 @@ export const ProgramCard: React.FC<ProgramCardProps> = ({ program, channel }) =>
       {/* Channel Header Bar */}
       <View style={[styles.channelHeader, { borderBottomColor: colors.borderSubtle }]}>
         <View style={styles.channelInfo}>
+          <ChannelLogo
+            logoUrl={channel.logo}
+            channelName={channel.name}
+            size={30}
+            style={{ marginRight: 8 }}
+          />
+          <Text style={[styles.channelName, { color: colors.text }]} numberOfLines={1}>
+            {channel.name}
+          </Text>
           {channel.number > 0 && (
             <View style={[styles.channelNumber, { backgroundColor: colors.surfaceSubtle }]}>
               <Text style={[styles.channelNumberText, { color: colors.textSecondary }]}>
@@ -76,20 +95,6 @@ export const ProgramCard: React.FC<ProgramCardProps> = ({ program, channel }) =>
               </Text>
             </View>
           )}
-          {channel.logo ? (
-            <Image
-              source={{ uri: channel.logo }}
-              style={styles.channelLogo}
-              resizeMode="contain"
-            />
-          ) : (
-            <View style={[styles.channelLogoFallback, { backgroundColor: colors.primary }]}>
-              <Text style={styles.channelLogoFallbackText}>{channel.name.slice(0, 2).toUpperCase()}</Text>
-            </View>
-          )}
-          <Text style={[styles.channelName, { color: colors.text }]} numberOfLines={1}>
-            {channel.name}
-          </Text>
         </View>
 
         <View style={styles.headerRight}>
@@ -115,15 +120,35 @@ export const ProgramCard: React.FC<ProgramCardProps> = ({ program, channel }) =>
       {/* Program Content Body */}
       <View style={styles.body}>
         {/* Left Poster if available */}
-        {program.posterUrl ? (
+        {posterUri && !imageError ? (
           <Image
-            source={{ uri: program.posterUrl }}
+            source={{ uri: posterUri }}
             style={styles.poster}
             resizeMode="cover"
+            onError={() => setImageError(true)}
           />
         ) : (
-          <View style={[styles.posterPlaceholder, { backgroundColor: colors.surfaceSubtle }]}>
-            <Film size={24} color={colors.textMuted} />
+          <View
+            style={[
+              styles.posterPlaceholder,
+              {
+                backgroundColor: badgeStyle.bg ? badgeStyle.bg + '25' : colors.surfaceSubtle,
+                borderColor: badgeStyle.bg || colors.border,
+              },
+            ]}
+          >
+            {(() => {
+              const c = (program.category || '').toLowerCase();
+              if (c.includes('film') || c.includes('cinema')) return <Film size={28} color={badgeStyle.text} />;
+              if (c.includes('serie') || c.includes('fiction')) return <Tv size={28} color={badgeStyle.text} />;
+              if (c.includes('sport') || c.includes('calcio')) return <Trophy size={28} color={badgeStyle.text} />;
+              if (c.includes('intrattenimento') || c.includes('show')) return <Sparkles size={28} color={badgeStyle.text} />;
+              if (c.includes('informazione') || c.includes('tg')) return <Radio size={28} color={badgeStyle.text} />;
+              return <Film size={28} color={badgeStyle.text} />;
+            })()}
+            <Text style={[styles.placeholderCategoryText, { color: badgeStyle.text }]} numberOfLines={1}>
+              {program.category || 'TV'}
+            </Text>
           </View>
         )}
 
@@ -295,8 +320,17 @@ const styles = StyleSheet.create({
     width: 76,
     height: 108,
     borderRadius: 10,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 6,
+    gap: 6,
+  },
+  placeholderCategoryText: {
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    textAlign: 'center',
   },
   details: {
     flex: 1,

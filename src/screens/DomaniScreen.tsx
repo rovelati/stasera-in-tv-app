@@ -18,7 +18,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, FlatList, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, FlatList, StyleSheet, RefreshControl } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { ProgramCard } from '../components/ProgramCard';
 import { CategoryFilter } from '../components/CategoryFilter';
@@ -26,6 +26,7 @@ import { EmptyState } from '../components/EmptyState';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { fetchDomaniProgramsApi } from '../api/client';
 import { ChannelSchedule, Program, Channel } from '../types';
+import { isFilmProgram } from '../utils/programImages';
 
 export const DomaniScreen: React.FC = () => {
   const { colors, selectedCategory } = useApp();
@@ -67,30 +68,34 @@ export const DomaniScreen: React.FC = () => {
       geo: item.channel.geo || null,
     };
 
+    let channelProgCount = 0;
     for (const prog of item.programs) {
+      if (channelProgCount >= 2) break; // Requisito: max 2 programmi per canale (Prima e Seconda Serata)
+
       const cat = (prog.category || '').toLowerCase();
       let matches = false;
 
       if (selectedCategory === 'Tutti') {
         matches = true;
       } else if (selectedCategory === 'Film') {
-        matches = cat.includes('film') || cat.includes('cinema');
+        matches = isFilmProgram(prog, channel.id);
       } else if (selectedCategory === 'Serie TV') {
-        matches = cat.includes('serie') || cat.includes('fiction');
+        matches = cat.includes('serie') || cat.includes('fiction') || cat.includes('soap');
       } else if (selectedCategory === 'Sport') {
-        matches = cat.includes('sport') || cat.includes('calcio');
+        matches = cat.includes('sport') || cat.includes('calcio') || cat.includes('motori');
       } else if (selectedCategory === 'Intrattenimento') {
-        matches = cat.includes('intrattenimento') || cat.includes('show');
+        matches = cat.includes('intrattenimento') || cat.includes('show') || cat.includes('varieta') || cat.includes('spettacolo');
       } else if (selectedCategory === 'Informazione') {
-        matches = cat.includes('informazione') || cat.includes('tg');
+        matches = cat.includes('informazione') || cat.includes('tg') || cat.includes('attualita') || cat.includes('notizie');
       } else if (selectedCategory === 'Bambini') {
-        matches = cat.includes('bambini') || cat.includes('ragazzi');
+        matches = cat.includes('bambini') || cat.includes('ragazzi') || cat.includes('animazione') || cat.includes('cartoni');
       } else if (selectedCategory === 'Documentari') {
-        matches = cat.includes('doc') || cat.includes('cultura');
+        matches = cat.includes('doc') || cat.includes('cultura') || cat.includes('storia') || cat.includes('natura');
       }
 
       if (matches) {
         filteredItems.push({ program: prog, channel });
+        channelProgCount++;
       }
     }
   }

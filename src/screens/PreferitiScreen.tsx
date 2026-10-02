@@ -32,6 +32,7 @@ import { ReminderItem, Channel } from '../types';
 import { fetchChannelsApi } from '../api/client';
 import { ChannelScheduleModal } from '../components/ChannelScheduleModal';
 import { openLiveStream } from '../services/streaming';
+import { ChannelLogo } from '../components/ChannelLogo';
 import {
   Bell,
   Trash2,
@@ -49,6 +50,7 @@ export const PreferitiScreen: React.FC = () => {
     colors,
     reminders,
     favorites,
+    isFavorite,
     toggleReminder,
     toggleFavorite,
     setActiveTab,
@@ -64,7 +66,7 @@ export const PreferitiScreen: React.FC = () => {
       .catch(err => console.warn('Error fetching channels for favorites:', err));
   }, []);
 
-  const favoriteChannels = allChannels.filter(c => favorites.includes(c.id));
+  const favoriteChannels = allChannels.filter(c => isFavorite(c.id));
 
   const handleCancelReminder = (item: ReminderItem) => {
     Alert.alert(
@@ -188,26 +190,26 @@ export const PreferitiScreen: React.FC = () => {
               onPress={() => setSelectedChannel(item)}
             >
               <View style={styles.channelLeft}>
-                {item.number > 0 && (
-                  <View style={[styles.numberBadge, { backgroundColor: colors.surfaceSubtle }]}>
-                    <Text style={[styles.numberText, { color: colors.textSecondary }]}>
-                      {item.number}
-                    </Text>
-                  </View>
-                )}
-
-                {item.logo ? (
-                  <Image source={{ uri: item.logo }} style={styles.channelLogo} resizeMode="contain" />
-                ) : (
-                  <View style={[styles.fallbackLogo, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.fallbackLogoText}>{item.name.slice(0, 2)}</Text>
-                  </View>
-                )}
+                <ChannelLogo
+                  logoUrl={item.logo}
+                  channelName={item.name}
+                  size={42}
+                  style={{ marginRight: 12 }}
+                />
 
                 <View style={styles.channelInfo}>
-                  <Text style={[styles.channelName, { color: colors.text }]}>{item.name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    <Text style={[styles.channelName, { color: colors.text }]}>{item.name}</Text>
+                    {item.number > 0 && (
+                      <View style={[styles.numberBadge, { backgroundColor: colors.surfaceSubtle }]}>
+                        <Text style={[styles.numberText, { color: colors.textSecondary }]}>
+                          {item.number}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={[styles.channelScheduleHint, { color: colors.primary }]}>
-                    Tocca per vedere la programmazione
+                    Tocca per consultare il palinsesto 24h
                   </Text>
                 </View>
               </View>

@@ -34,6 +34,7 @@ import {
 } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { openLiveStream } from '../services/streaming';
+import { ChannelLogo } from './ChannelLogo';
 import { X, Play, Bell, Share2, Clock, Check } from 'lucide-react-native';
 
 const { height } = Dimensions.get('window');
@@ -70,8 +71,8 @@ export const ProgramDetailModal: React.FC = () => {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 10,
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 8,
       onPanResponderMove: (_, gestureState) => {
         if (gestureState.dy > 0) {
           panY.setValue(gestureState.dy);
@@ -129,11 +130,14 @@ export const ProgramDetailModal: React.FC = () => {
             },
           ]}
         >
-          {/* Maniglia di trascinamento e tasto X di chiusura */}
-          <View {...panResponder.panHandlers} style={styles.sheetHeader}>
-            <TouchableOpacity onPress={handleClose} hitSlop={{ top: 20, bottom: 20, left: 40, right: 40 }}>
-              <View style={[styles.handle, { backgroundColor: colors.borderSubtle }]} />
-            </TouchableOpacity>
+          {/* Maniglia di trascinamento e tasto X di chiusura - tocco chiude la scheda */}
+          <TouchableOpacity
+            {...panResponder.panHandlers}
+            style={styles.sheetHeader}
+            onPress={handleClose}
+            activeOpacity={0.9}
+          >
+            <View style={[styles.handle, { backgroundColor: colors.borderSubtle }]} />
 
             <TouchableOpacity
               style={[styles.closeBtn, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}
@@ -143,64 +147,67 @@ export const ProgramDetailModal: React.FC = () => {
             >
               <X size={20} color={colors.text} strokeWidth={2.5} />
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
 
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
             bounces={false}
+            keyboardShouldPersistTaps="handled"
           >
-            {/* Locandina / Immagine di copertina */}
-            {selectedProgram.posterUrl ? (
-              <Image
-                source={{ uri: selectedProgram.posterUrl }}
-                style={styles.bannerImage}
-                resizeMode="cover"
-              />
-            ) : null}
+            {/* Cliccando su qualsiasi punto informativo (immagine, canale, orario, titolo), la scheda si chiude */}
+            <TouchableOpacity activeOpacity={1} onPress={handleClose}>
+              {/* Locandina / Immagine di copertina */}
+              {selectedProgram.posterUrl ? (
+                <Image
+                  source={{ uri: selectedProgram.posterUrl }}
+                  style={styles.bannerImage}
+                  resizeMode="cover"
+                />
+              ) : null}
 
-            {/* Metadati Canale ed Emittente */}
-            <View style={styles.metaHeader}>
-              <View style={[styles.channelPill, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
-                {selectedProgram.channelLogo ? (
-                  <Image
-                    source={{ uri: selectedProgram.channelLogo }}
-                    style={styles.channelLogo}
-                    resizeMode="contain"
+              {/* Metadati Canale ed Emittente */}
+              <View style={styles.metaHeader}>
+                <View style={[styles.channelPill, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                  <ChannelLogo
+                    logoUrl={selectedProgram.channelLogo}
+                    channelName={selectedProgram.channelName || 'TV'}
+                    size={26}
+                    style={{ marginRight: 6 }}
                   />
-                ) : null}
-                <Text style={[styles.channelName, { color: colors.text }]}>
-                  {selectedProgram.channelName || 'Canale TV'}
-                </Text>
-                {selectedProgram.channelNumber && selectedProgram.channelNumber > 0 ? (
-                  <View style={[styles.numBadge, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.numText}>LCN {selectedProgram.channelNumber}</Text>
+                  <Text style={[styles.channelName, { color: colors.text }]}>
+                    {selectedProgram.channelName || 'Canale TV'}
+                  </Text>
+                  {selectedProgram.channelNumber && selectedProgram.channelNumber > 0 ? (
+                    <View style={[styles.numBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.numText}>LCN {selectedProgram.channelNumber}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {selectedProgram.category ? (
+                  <View style={[styles.categoryBadge, { backgroundColor: colors.badgeBg }]}>
+                    <Text style={[styles.categoryText, { color: colors.badgeText }]}>
+                      {selectedProgram.category}
+                    </Text>
                   </View>
                 ) : null}
               </View>
 
-              {selectedProgram.category ? (
-                <View style={[styles.categoryBadge, { backgroundColor: colors.badgeBg }]}>
-                  <Text style={[styles.categoryText, { color: colors.badgeText }]}>
-                    {selectedProgram.category}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-
-            {/* Titolo Principale */}
-            <Text style={[styles.title, { color: colors.text }]}>
-              {selectedProgram.title}
-            </Text>
-
-            {/* Orario e Durata */}
-            <View style={[styles.timeCard, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}>
-              <Clock size={16} color={colors.primary} style={{ marginRight: 6 }} />
-              <Text style={[styles.timeText, { color: colors.text }]}>
-                {selectedProgram.startTimeFormatted || 'Inizio'}
-                {selectedProgram.endTimeFormatted ? ` - ${selectedProgram.endTimeFormatted}` : ''}
+              {/* Titolo Principale */}
+              <Text style={[styles.title, { color: colors.text }]}>
+                {selectedProgram.title}
               </Text>
-            </View>
+
+              {/* Orario e Durata */}
+              <View style={[styles.timeCard, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}>
+                <Clock size={16} color={colors.primary} style={{ marginRight: 6 }} />
+                <Text style={[styles.timeText, { color: colors.text }]}>
+                  {selectedProgram.startTimeFormatted || 'Inizio'}
+                  {selectedProgram.endTimeFormatted ? ` - ${selectedProgram.endTimeFormatted}` : ''}
+                </Text>
+              </View>
+            </TouchableOpacity>
 
             {/* Tasti di Azione Principali */}
             <View style={styles.actionRow}>
@@ -250,8 +257,8 @@ export const ProgramDetailModal: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Sinossi / Trama Completa */}
-            <View style={styles.descSection}>
+            {/* Sinossi / Trama Completa - cliccando su di essa la scheda si chiude */}
+            <TouchableOpacity activeOpacity={1} onPress={handleClose} style={styles.descSection}>
               <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
                 TRAMA & DETTAGLI
               </Text>
@@ -259,7 +266,7 @@ export const ProgramDetailModal: React.FC = () => {
                 {selectedProgram.description ||
                   'Nessuna sinossi dettagliata disponibile per questo programma.'}
               </Text>
-            </View>
+            </TouchableOpacity>
 
             {/* Tasto Condividi */}
             <TouchableOpacity
