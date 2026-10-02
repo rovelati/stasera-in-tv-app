@@ -83,11 +83,37 @@ export function normalizeChannelId(id?: string | null): string {
 }
 
 /**
- * Converte un URL o percorso di logo relativo nel percorso CDN assoluto di intvstasera.it
+ * Mappatura loghi ufficiali HD ad alta risoluzione (da Quotidiano.net e broadcast ufficiali)
+ */
+export const OFFICIAL_CHANNEL_LOGOS: Record<string, string> = {
+  'rai1': 'https://guidatv.quotidiano.net/staticfiles/img/loghi_tv/rai_1.png',
+  'rai2': 'https://guidatv.quotidiano.net/staticfiles/img/loghi_tv/rai_2.png',
+  'rai3': 'https://guidatv.quotidiano.net/staticfiles/img/loghi_tv/rai_3.png',
+  'rai4': 'https://guidatv.quotidiano.net/staticfiles/img/loghi_tv/rai_4.png',
+  'rai5': 'https://guidatv.quotidiano.net/staticfiles/img/loghi_tv/rai_5.png',
+  'rete4': 'https://guidatv.quotidiano.net/staticfiles/img/loghi_tv/rete4.png',
+  'canale5': 'https://guidatv.quotidiano.net/staticfiles/img/loghi_tv/canale5.png',
+  'italia1': 'https://guidatv.quotidiano.net/staticfiles/img/loghi_tv/italia_1.png',
+  'la7': 'https://guidatv.quotidiano.net/staticfiles/img/loghi_tv/la7.png',
+  'tv8': 'https://guidatv.quotidiano.net/staticfiles/img/loghi_tv/tv8.png',
+  'nove': 'https://guidatv.quotidiano.net/staticfiles/img/loghi_tv/nove.png',
+  'iris': 'https://guidatv.quotidiano.net/staticfiles/img/loghi_tv/iris.svg',
+  'italia2': 'https://guidatv.quotidiano.net/staticfiles/img/loghi_tv/italia2.svg',
+};
+
+/**
+ * Converte un URL o percorso di logo relativo nel percorso CDN ufficiale Quotidiano / intvstasera.it
  */
 export function resolveLogoUrl(logo?: string | null): string | null {
   if (!logo) return null;
   const trimmed = String(logo).trim();
+
+  // Estrai l'identificatore del canale dal percorso o nome file per verificare se abbiamo il logo ufficiale HD
+  const baseName = trimmed.split('/').pop()?.split('.')[0]?.toLowerCase().replace(/[^a-z0-9]/g, '') || '';
+  if (OFFICIAL_CHANNEL_LOGOS[baseName]) {
+    return OFFICIAL_CHANNEL_LOGOS[baseName];
+  }
+
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
     return trimmed;
   }
