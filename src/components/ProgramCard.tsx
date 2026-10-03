@@ -1,24 +1,20 @@
 /**
  * ============================================================================
- * STASERA IN TV - PROGRAM CARD COMPONENT
+ * STASERA IN TV - PROGRAM CARD COMPONENT (MEMOIZED & HIGH PERFORMANCE)
  * ============================================================================
  * 
  * Card principale della guida TV per i programmi serali.
  * 
- * ELEMENTI GRAFICI & FUNZIONALI:
- * 1. Intestazione Canale: logo dell'emittente, LCN digitale terrestre e cuoricino preferiti.
- * 2. Badge Prima Serata: evidenzia visivamente i programmi delle 21:15.
- * 3. Locandina Poster con placeholder dinamico in caso di assenza immagine.
- * 4. Badge di Categoria con color-coding semantico (Film, Sport, Serie TV, Documentari).
- * 5. Tasti Azione Rapida:
- *    - "Diretta": apre il player streaming live ufficiale.
- *    - "Promemoria": attiva la sveglia 10 minuti prima con feedback visivo.
+ * OTTIMIZZAZIONI DI RENDERING:
+ * 1. React.memo per evitare ri-render non necessari durante lo scroll.
+ * 2. `delayPressIn={0}` per apertura istantanea della scheda evento al tocco.
+ * 3. HitSlop per azioni rapide (Preferiti, Diretta, Promemoria).
  * 
  * @module components/ProgramCard
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { Program, Channel } from '../types';
 import { openLiveStream } from '../services/streaming';
@@ -31,9 +27,7 @@ interface ProgramCardProps {
   channel: Channel;
 }
 
-const { width } = Dimensions.get('window');
-
-export const ProgramCard: React.FC<ProgramCardProps> = ({ program, channel }) => {
+const ProgramCardComponent: React.FC<ProgramCardProps> = ({ program, channel }) => {
   const { colors, toggleReminder, hasReminder, toggleFavorite, isFavorite, setSelectedProgram } = useApp();
   const [imageError, setImageError] = React.useState<boolean>(false);
 
@@ -63,16 +57,28 @@ export const ProgramCard: React.FC<ProgramCardProps> = ({ program, channel }) =>
 
   const badgeStyle = getCategoryBadgeStyle(program.category);
 
+  const handleOpenDetail = () => {
+    setSelectedProgram({
+      ...program,
+      channelId: channel.id,
+      channelName: channel.name,
+      channelLogo: channel.logo,
+      channelNumber: channel.number,
+      streamUrl: channel.stream?.url,
+      streamLabel: channel.stream?.label,
+    });
+  };
+
   return (
     <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={() => setSelectedProgram({ ...program, channelId: channel.id, channelName: channel.name, channelLogo: channel.logo, channelNumber: channel.number, streamUrl: channel.stream?.url, streamLabel: channel.stream?.label })}
+      activeOpacity={0.7}
+      delayPressIn={0}
+      onPress={handleOpenDetail}
       style={[
         styles.card,
         {
           backgroundColor: colors.card,
           borderColor: colors.border,
-          shadowColor: '#000000',
         },
       ]}
     >
@@ -104,8 +110,11 @@ export const ProgramCard: React.FC<ProgramCardProps> = ({ program, channel }) =>
             </View>
           )}
           <TouchableOpacity
-            onPress={() => toggleFavorite(channel.id)}
-            hitSlop={10}
+            onPress={(e) => {
+              e.stopPropagation();
+              toggleFavorite(channel.id);
+            }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             style={styles.favButton}
           >
             <Heart
@@ -187,7 +196,11 @@ export const ProgramCard: React.FC<ProgramCardProps> = ({ program, channel }) =>
             {channel.stream?.url && (
               <TouchableOpacity
                 style={[styles.streamBtn, { backgroundColor: '#dc2626' }]}
-                onPress={() => openLiveStream(channel.stream?.url, channel.name)}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  openLiveStream(channel.stream?.url, channel.name);
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 activeOpacity={0.8}
               >
                 <Play size={12} color="#ffffff" fill="#ffffff" style={{ marginRight: 4 }} />
@@ -203,7 +216,11 @@ export const ProgramCard: React.FC<ProgramCardProps> = ({ program, channel }) =>
                   borderColor: isReminded ? colors.accent : colors.border,
                 },
               ]}
-              onPress={() => toggleReminder(program, channel.name, channel.logo)}
+              onPress={(e) => {
+                e.stopPropagation();
+                toggleReminder(program, channel.name, channel.logo);
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               activeOpacity={0.8}
             >
               <Bell
@@ -227,6 +244,8 @@ export const ProgramCard: React.FC<ProgramCardProps> = ({ program, channel }) =>
     </TouchableOpacity>
   );
 };
+
+export const ProgramCard = React.memo(ProgramCardComponent);
 
 const styles = StyleSheet.create({
   card: {
@@ -263,24 +282,6 @@ const styles = StyleSheet.create({
   channelNumberText: {
     fontSize: 10,
     fontWeight: '800',
-  },
-  channelLogo: {
-    width: 28,
-    height: 20,
-    marginRight: 8,
-  },
-  channelLogoFallback: {
-    width: 24,
-    height: 20,
-    borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  channelLogoFallbackText: {
-    color: '#ffffff',
-    fontSize: 9,
-    fontWeight: '900',
   },
   channelName: {
     fontSize: 14,

@@ -34,7 +34,7 @@ interface LiveProgramCardProps {
   nextProgram?: Program | null;
 }
 
-export const LiveProgramCard: React.FC<LiveProgramCardProps> = ({
+const LiveProgramCardComponent: React.FC<LiveProgramCardProps> = ({
   channel,
   currentProgram,
   nextProgram,
@@ -379,3 +379,5 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+
+export const LiveProgramCard = React.memo(LiveProgramCardComponent);

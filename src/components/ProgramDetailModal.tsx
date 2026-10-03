@@ -6,13 +6,15 @@
  * Scheda descrittiva approfondita per il singolo evento televisivo:
  * 
  * DESIGN & INTERAZIONI NATIVE:
- * 1. Bottom Sheet con Gesto di Trascinamento (Swipe-Down PanResponder):
- *    - Chiusura fluida con trascinamento verso il basso con fisica a molla (Spring Physics).
- *    - Chiusura a prova di sfarfallio (senza doppio scatto o riapertura visiva).
- * 2. Tasto di Chiusura Rapido con Touch Target allargato (HitSlop).
- * 3. Banner Locandina HD / Immagine di Copertina.
- * 4. Pulsante Notifica Sveglia (-10 min) con toggle di stato e feedback visivo.
- * 5. Condivisione Nativa (Share API) del programma sui social/messaggistica.
+ * 1. Chiusura 100% Robusta & Anti-Deadlock:
+ *    - Tasto X in alto a destra con area di tocco allargata (HitSlop).
+ *    - Tocco sul backdrop semitrasparente esterno.
+ *    - Gesto Swipe-Down fluido sulla maniglia superiore.
+ *    - Tasto fisico "Indietro" di Android supportato nativamente.
+ * 2. Banner Locandina HD / Immagine di Copertina ad alta risoluzione.
+ * 3. Condivisione mirata con link diretto alla pagina del canale su intvstasera.it.
+ * 4. Pulsante "Guarda in Diretta" istantaneo e sicuro.
+ * 5. Pulsante "Avvisami prima dell'inizio" con promemoria 10 minuti prima.
  * 
  * @module components/ProgramDetailModal
  */
@@ -42,44 +44,42 @@ const { height } = Dimensions.get('window');
 export const ProgramDetailModal: React.FC = () => {
   const { selectedProgram, setSelectedProgram, colors, toggleReminder, hasReminder } = useApp();
   const panY = useRef(new Animated.Value(0)).current;
-  const isClosing = useRef(false);
 
-  // Ripristina la posizione iniziale del foglio solo all'apertura di un nuovo programma
+  // Ripristina la posizione iniziale del foglio all'apertura
   useEffect(() => {
     if (selectedProgram) {
-      isClosing.current = false;
       panY.setValue(0);
     }
   }, [selectedProgram]);
 
   /**
-   * Chiusura fluida con animazione discendente verso il basso.
-   * Evita il reset prematuro di panY per eliminare sfarfallii e riaperture transitorie.
+   * Chiusura affidabile e istantanea del modal.
+   * Non utilizza flag booleani bloccanti per evitare qualsiasi deadlock su Android.
    */
   const handleClose = () => {
-    if (isClosing.current) return;
-    isClosing.current = true;
-
     Animated.timing(panY, {
       toValue: height,
-      duration: 180,
+      duration: 150,
       useNativeDriver: true,
     }).start(() => {
       setSelectedProgram(null);
     });
   };
 
+  /**
+   * Gestore del gesto di trascinamento swipe-down sulla maniglia
+   */
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 8,
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 5,
       onPanResponderMove: (_, gestureState) => {
         if (gestureState.dy > 0) {
           panY.setValue(gestureState.dy);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 80 || gestureState.vy > 0.6) {
+        if (gestureState.dy > 60 || gestureState.vy > 0.5) {
           handleClose();
         } else {
           Animated.spring(panY, {
@@ -98,9 +98,15 @@ export const ProgramDetailModal: React.FC = () => {
 
   const handleShare = async () => {
     try {
+      const channelSlug = selectedProgram.channelId || 'stasera';
+      const programUrl = `https://www.intvstasera.it/${channelSlug}/`;
+      const chName = selectedProgram.channelName || 'TV';
+      const timeStr = selectedProgram.startTimeFormatted ? `alle ${selectedProgram.startTimeFormatted}` : 'stasera';
+
       await Share.share({
-        title: `${selectedProgram.title} su ${selectedProgram.channelName || 'TV'}`,
-        message: `Guarda "${selectedProgram.title}" in TV stasera (${selectedProgram.startTimeFormatted || ''}) su ${selectedProgram.channelName || ''}! Scopri la guida completa su https://www.intvstasera.it`,
+        title: `${selectedProgram.title} su ${chName}`,
+        message: `Guarda "${selectedProgram.title}" in onda ${timeStr} su ${chName}!\nScopri i dettagli del programma su ${programUrl}`,
+        url: programUrl,
       });
     } catch (err) {
       console.warn('[ProgramDetailModal] Errore condivisione:', err);
@@ -115,7 +121,7 @@ export const ProgramDetailModal: React.FC = () => {
       onRequestClose={handleClose}
     >
       <View style={styles.backdrop}>
-        {/* Tocco all'esterno del foglio per chiusura immediata */}
+        {/* Tocco sull'area scura esterna per chiusura immediata */}
         <TouchableWithoutFeedback onPress={handleClose}>
           <View style={styles.backdropDismiss} />
         </TouchableWithoutFeedback>
@@ -130,24 +136,27 @@ export const ProgramDetailModal: React.FC = () => {
             },
           ]}
         >
-          {/* Maniglia di trascinamento e tasto X di chiusura - tocco chiude la scheda */}
-          <TouchableOpacity
-            {...panResponder.panHandlers}
-            style={styles.sheetHeader}
-            onPress={handleClose}
-            activeOpacity={0.9}
-          >
+          {/* Maniglia di trascinamento swipe-down (PanResponder dedicato) */}
+          <View {...panResponder.panHandlers} style={styles.sheetHeader}>
             <View style={[styles.handle, { backgroundColor: colors.borderSubtle }]} />
 
+            {/* Tasto X di Chiusura ad alta visibilità e hitSlop generoso */}
             <TouchableOpacity
-              style={[styles.closeBtn, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}
+              style={[
+                styles.closeBtn,
+                {
+                  backgroundColor: colors.surfaceSubtle,
+                  borderColor: colors.borderSubtle,
+                },
+              ]}
               onPress={handleClose}
-              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+              hitSlop={{ top: 25, bottom: 25, left: 25, right: 25 }}
               activeOpacity={0.7}
+              accessibilityLabel="Chiudi scheda"
             >
               <X size={20} color={colors.text} strokeWidth={2.5} />
             </TouchableOpacity>
-          </TouchableOpacity>
+          </View>
 
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -155,59 +164,56 @@ export const ProgramDetailModal: React.FC = () => {
             bounces={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Cliccando su qualsiasi punto informativo (immagine, canale, orario, titolo), la scheda si chiude */}
-            <TouchableOpacity activeOpacity={1} onPress={handleClose}>
-              {/* Locandina / Immagine di copertina */}
-              {selectedProgram.posterUrl ? (
-                <Image
-                  source={{ uri: selectedProgram.posterUrl }}
-                  style={styles.bannerImage}
-                  resizeMode="cover"
+            {/* Locandina / Immagine di copertina HD */}
+            {selectedProgram.posterUrl ? (
+              <Image
+                source={{ uri: selectedProgram.posterUrl }}
+                style={styles.bannerImage}
+                resizeMode="cover"
+              />
+            ) : null}
+
+            {/* Metadati Canale ed Emittente */}
+            <View style={styles.metaHeader}>
+              <View style={[styles.channelPill, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                <ChannelLogo
+                  logoUrl={selectedProgram.channelLogo}
+                  channelName={selectedProgram.channelName || 'TV'}
+                  size={26}
+                  style={{ marginRight: 6 }}
                 />
-              ) : null}
-
-              {/* Metadati Canale ed Emittente */}
-              <View style={styles.metaHeader}>
-                <View style={[styles.channelPill, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
-                  <ChannelLogo
-                    logoUrl={selectedProgram.channelLogo}
-                    channelName={selectedProgram.channelName || 'TV'}
-                    size={26}
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={[styles.channelName, { color: colors.text }]}>
-                    {selectedProgram.channelName || 'Canale TV'}
-                  </Text>
-                  {selectedProgram.channelNumber && selectedProgram.channelNumber > 0 ? (
-                    <View style={[styles.numBadge, { backgroundColor: colors.primary }]}>
-                      <Text style={styles.numText}>LCN {selectedProgram.channelNumber}</Text>
-                    </View>
-                  ) : null}
-                </View>
-
-                {selectedProgram.category ? (
-                  <View style={[styles.categoryBadge, { backgroundColor: colors.badgeBg }]}>
-                    <Text style={[styles.categoryText, { color: colors.badgeText }]}>
-                      {selectedProgram.category}
-                    </Text>
+                <Text style={[styles.channelName, { color: colors.text }]}>
+                  {selectedProgram.channelName || 'Canale TV'}
+                </Text>
+                {selectedProgram.channelNumber && selectedProgram.channelNumber > 0 ? (
+                  <View style={[styles.numBadge, { backgroundColor: colors.primary }]}>
+                    <Text style={styles.numText}>LCN {selectedProgram.channelNumber}</Text>
                   </View>
                 ) : null}
               </View>
 
-              {/* Titolo Principale */}
-              <Text style={[styles.title, { color: colors.text }]}>
-                {selectedProgram.title}
-              </Text>
+              {selectedProgram.category ? (
+                <View style={[styles.categoryBadge, { backgroundColor: colors.badgeBg }]}>
+                  <Text style={[styles.categoryText, { color: colors.badgeText }]}>
+                    {selectedProgram.category}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
 
-              {/* Orario e Durata */}
-              <View style={[styles.timeCard, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}>
-                <Clock size={16} color={colors.primary} style={{ marginRight: 6 }} />
-                <Text style={[styles.timeText, { color: colors.text }]}>
-                  {selectedProgram.startTimeFormatted || 'Inizio'}
-                  {selectedProgram.endTimeFormatted ? ` - ${selectedProgram.endTimeFormatted}` : ''}
-                </Text>
-              </View>
-            </TouchableOpacity>
+            {/* Titolo Principale */}
+            <Text style={[styles.title, { color: colors.text }]}>
+              {selectedProgram.title}
+            </Text>
+
+            {/* Orario e Durata */}
+            <View style={[styles.timeCard, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}>
+              <Clock size={16} color={colors.primary} style={{ marginRight: 6 }} />
+              <Text style={[styles.timeText, { color: colors.text }]}>
+                {selectedProgram.startTimeFormatted || 'Inizio'}
+                {selectedProgram.endTimeFormatted ? ` - ${selectedProgram.endTimeFormatted}` : ''}
+              </Text>
+            </View>
 
             {/* Tasti di Azione Principali */}
             <View style={styles.actionRow}>
@@ -257,8 +263,8 @@ export const ProgramDetailModal: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Sinossi / Trama Completa - cliccando su di essa la scheda si chiude */}
-            <TouchableOpacity activeOpacity={1} onPress={handleClose} style={styles.descSection}>
+            {/* Sinossi / Trama Completa */}
+            <View style={styles.descSection}>
               <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
                 TRAMA & DETTAGLI
               </Text>
@@ -266,7 +272,7 @@ export const ProgramDetailModal: React.FC = () => {
                 {selectedProgram.description ||
                   'Nessuna sinossi dettagliata disponibile per questo programma.'}
               </Text>
-            </TouchableOpacity>
+            </View>
 
             {/* Tasto Condividi */}
             <TouchableOpacity
@@ -296,7 +302,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheet: {
-    maxHeight: height * 0.88,
+    maxHeight: height * 0.90,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
@@ -304,12 +310,13 @@ const styles = StyleSheet.create({
   },
   sheetHeader: {
     alignItems: 'center',
-    paddingTop: 12,
-    paddingBottom: 10,
+    paddingTop: 14,
+    paddingBottom: 12,
     position: 'relative',
+    zIndex: 20,
   },
   handle: {
-    width: 48,
+    width: 44,
     height: 5,
     borderRadius: 3,
   },
@@ -317,21 +324,23 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     top: 8,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
+    zIndex: 30,
+    elevation: 4,
   },
   scrollContent: {
     padding: 20,
+    paddingTop: 4,
     paddingBottom: 44,
   },
   bannerImage: {
     width: '100%',
-    height: 200,
+    height: 210,
     borderRadius: 16,
     marginBottom: 16,
     backgroundColor: '#1e293b',
@@ -350,10 +359,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     gap: 6,
-  },
-  channelLogo: {
-    width: 20,
-    height: 16,
   },
   channelName: {
     fontSize: 12,
@@ -379,10 +384,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   title: {
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: '900',
     letterSpacing: -0.5,
-    lineHeight: 28,
+    lineHeight: 27,
     marginBottom: 12,
   },
   timeCard: {
