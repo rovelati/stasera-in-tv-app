@@ -259,6 +259,7 @@ export function resolveProgramPoster(
     if (cleaned.includes('affari tuoi')) return KNOWN_PROGRAM_POSTERS['affari tuoi'];
     if (cleaned.includes('ruota della fortuna') || (cleaned.includes('ruota') && cleaned.includes('fortuna'))) return KNOWN_PROGRAM_POSTERS['la ruota della fortuna'];
     if (cleaned.includes('striscia')) return KNOWN_PROGRAM_POSTERS['striscia la notizia'];
+    if (cleaned.includes('iene')) return 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?auto=format&fit=crop&w=800&q=80';
 
     for (const [key, url] of Object.entries(KNOWN_PROGRAM_POSTERS)) {
       if (cleaned === key || cleaned.startsWith(key) || key.startsWith(cleaned)) {
@@ -292,8 +293,13 @@ export function resolveProgramPoster(
 
   // 2. Se il programma ha già una locandina remota valida (da Sorrisi o Astro API)
   if (currentPoster && typeof currentPoster === 'string' && currentPoster.startsWith('http')) {
-    const upscaled = upscaleImageUrl(currentPoster);
-    if (upscaled) return upscaled;
+    // Filtro di sicurezza: scarta la locandina di Carlo Acutis se il programma non è il docufilm
+    if (currentPoster.includes('dAnK3dm6AqEltMrG2NlZq18qrqt') && !cleaned.includes('carlo')) {
+      // Ignora l'URL errato
+    } else {
+      const upscaled = upscaleImageUrl(currentPoster);
+      if (upscaled) return upscaled;
+    }
   }
 
   // 3. Fallback artwork tematico per categoria
