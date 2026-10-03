@@ -24,7 +24,7 @@ import { useApp } from '../context/AppContext';
 import { Program, Channel } from '../types';
 import { openLiveStream } from '../services/streaming';
 import { getCurrentRomeMinutes, getTimeMinutes } from '../api/client';
-import { resolveProgramPoster } from '../utils/programImages';
+import { getProgramPosterSource } from '../utils/programImages';
 import { ChannelLogo } from './ChannelLogo';
 import { Play, Clock, ArrowRight, Radio, Film, Tv, Trophy, Sparkles } from 'lucide-react-native';
 
@@ -45,7 +45,7 @@ const LiveProgramCardComponent: React.FC<LiveProgramCardProps> = ({
   const [isUpcoming, setIsUpcoming] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
 
-  const posterUri = resolveProgramPoster(
+  const posterSource = getProgramPosterSource(
     currentProgram.posterUrl,
     currentProgram.title,
     currentProgram.category,
@@ -140,9 +140,9 @@ const LiveProgramCardComponent: React.FC<LiveProgramCardProps> = ({
       {/* Main Live Content */}
       <View style={styles.content}>
         <View style={styles.bodyRow}>
-          {posterUri && !imageError ? (
+          {posterSource && !imageError ? (
             <Image
-              source={{ uri: posterUri }}
+              source={posterSource}
               style={styles.livePoster}
               resizeMode="cover"
               onError={() => setImageError(true)}

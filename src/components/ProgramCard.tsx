@@ -20,7 +20,7 @@ import { Program, Channel } from '../types';
 import { openLiveStream } from '../services/streaming';
 import { ChannelLogo } from './ChannelLogo';
 import { Bell, Play, Film, Tv, Trophy, Sparkles, Clock, Heart, Radio } from 'lucide-react-native';
-import { resolveProgramPoster } from '../utils/programImages';
+import { getProgramPosterSource } from '../utils/programImages';
 
 interface ProgramCardProps {
   program: Program;
@@ -34,7 +34,7 @@ const ProgramCardComponent: React.FC<ProgramCardProps> = ({ program, channel }) 
   const isFav = isFavorite(channel.id);
   const isReminded = hasReminder(program.id);
 
-  const posterUri = resolveProgramPoster(
+  const posterSource = getProgramPosterSource(
     program.posterUrl,
     program.title,
     program.category,
@@ -129,9 +129,9 @@ const ProgramCardComponent: React.FC<ProgramCardProps> = ({ program, channel }) 
       {/* Program Content Body */}
       <View style={styles.body}>
         {/* Left Poster if available */}
-        {posterUri && !imageError ? (
+        {posterSource && !imageError ? (
           <Image
-            source={{ uri: posterUri }}
+            source={posterSource}
             style={styles.poster}
             resizeMode="cover"
             onError={() => setImageError(true)}

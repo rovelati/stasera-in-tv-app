@@ -23,7 +23,7 @@
  * @module context/AppContext
  */
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 import { CategoryType, TabType, Program, ReminderItem, Channel } from '../types';
 import { darkTheme, lightTheme, ThemeColors } from '../theme/colors';
@@ -94,43 +94,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   /** Seleziona un programma e invia l'evento analitico */
-  const handleSetSelectedProgram = (prog: Program | null) => {
+  const handleSetSelectedProgram = useCallback((prog: Program | null) => {
     setSelectedProgram(prog);
     if (prog) {
       trackSelectProgram(prog.title, prog.channelName || 'Canale TV', prog.category);
     }
-  };
+  }, []);
 
   /** Commuta tra tema scuro e tema chiaro */
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     setIsDarkMode(prev => !prev);
-  };
+  }, []);
 
   const colors = isDarkMode ? darkTheme : lightTheme;
 
   /** Alterna la presenza di un canale nei preferiti e aggiorna la persistenza */
-  const toggleFavorite = async (channelId: string) => {
+  const toggleFavorite = useCallback(async (channelId: string) => {
     if (!channelId) return;
     const targetNorm = normalizeChannelId(channelId);
-    const exists = favorites.some(fav => normalizeChannelId(fav) === targetNorm);
-    const updated = exists
-      ? favorites.filter(fav => normalizeChannelId(fav) !== targetNorm)
-      : [...favorites, channelId];
-    setFavorites(updated);
-    await saveFavoriteChannelIds(updated);
-  };
+    setFavorites(prev => {
+      const exists = prev.some(fav => normalizeChannelId(fav) === targetNorm);
+      const updated = exists
+        ? prev.filter(fav => normalizeChannelId(fav) !== targetNorm)
+        : [...prev, channelId];
+      saveFavoriteChannelIds(updated);
+      return updated;
+    });
+  }, []);
 
   /** Verifica se il canale è marcato come preferito tramite confronto normalizzato */
-  const isFavorite = (channelId: string) => {
+  const isFavorite = useCallback((channelId: string) => {
     if (!channelId) return false;
     const targetNorm = normalizeChannelId(channelId);
     return favorites.some(fav => normalizeChannelId(fav) === targetNorm);
-  };
+  }, [favorites]);
 
   /** Verifica se un programma possiede una notifica programmata */
-  const hasReminder = (programId: string) => {
+  const hasReminder = useCallback((programId: string) => {
     return reminders.some(r => r.programId === programId);
-  };
+  }, [reminders]);
 
   /**
    * Gestisce il ciclo di vita di un promemoria:
@@ -139,7 +141,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
    * 
    * @returns true se il promemoria è stato attivato, false se è stato rimosso
    */
-  const toggleReminder = async (
+  const toggleReminder = useCallback(async (
     program: Program,
     channelName: string,
     channelLogo: string
@@ -173,30 +175,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       trackReminder(program.title, channelName, 'add');
       return true;
     }
-  };
+  }, [reminders]);
+
+  const contextValue = useMemo(() => ({
+    isDarkMode,
+    toggleTheme,
+    colors,
+    activeTab,
+    setActiveTab,
+    selectedCategory,
+    setSelectedCategory,
+    searchQuery,
+    setSearchQuery,
+    favorites,
+    toggleFavorite,
+    isFavorite,
+    reminders,
+    toggleReminder,
+    hasReminder,
+    selectedProgram,
+    setSelectedProgram: handleSetSelectedProgram,
+  }), [
+    isDarkMode,
+    toggleTheme,
+    colors,
+    activeTab,
+    selectedCategory,
+    searchQuery,
+    favorites,
+    toggleFavorite,
+    isFavorite,
+    reminders,
+    toggleReminder,
+    hasReminder,
+    selectedProgram,
+    handleSetSelectedProgram,
+  ]);
 
   return (
-    <AppContext.Provider
-      value={{
-        isDarkMode,
-        toggleTheme,
-        colors,
-        activeTab,
-        setActiveTab,
-        selectedCategory,
-        setSelectedCategory,
-        searchQuery,
-        setSearchQuery,
-        favorites,
-        toggleFavorite,
-        isFavorite,
-        reminders,
-        toggleReminder,
-        hasReminder,
-        selectedProgram,
-        setSelectedProgram: handleSetSelectedProgram,
-      }}
-    >
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );

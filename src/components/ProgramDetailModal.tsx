@@ -1,20 +1,23 @@
 /**
  * ============================================================================
- * STASERA IN TV - PROGRAM DETAIL BOTTOM SHEET MODAL
+ * STASERA IN TV - PROGRAM DETAIL BOTTOM SHEET MODAL (HARDENED & THREAD-SAFE)
  * ============================================================================
  * 
  * Scheda descrittiva approfondita per il singolo evento televisivo:
  * 
- * DESIGN & INTERAZIONI NATIVE:
+ * DESIGN & INTERAZIONI NATIVE RESILIENTI:
  * 1. Chiusura 100% Robusta & Anti-Deadlock:
- *    - Tasto X in alto a destra con area di tocco allargata (HitSlop).
- *    - Tocco sul backdrop semitrasparente esterno.
- *    - Gesto Swipe-Down fluido sulla maniglia superiore.
- *    - Tasto fisico "Indietro" di Android supportato nativamente.
- * 2. Banner Locandina HD / Immagine di Copertina ad alta risoluzione.
- * 3. Condivisione mirata con link diretto alla pagina del canale su intvstasera.it.
- * 4. Pulsante "Guarda in Diretta" istantaneo e sicuro.
- * 5. Pulsante "Avvisami prima dell'inizio" con promemoria 10 minuti prima.
+ *    - Utilizza il meccanismo nativo Android Window Manager (`animationType="slide"`).
+ *    - Elimina completamente nodi `Animated.Value` orfani che bloccavano la seconda apertura della card.
+ *    - Tasto X in alto a destra con area di tocco allargata (HitSlop 25px).
+ *    - Tocco sul backdrop semitrasparente esterno per chiusura istantanea.
+ *    - Gesto Swipe-Down fluido con PanResponder non bloccante.
+ *    - Tasto fisico "Indietro" di Android supportato nativamente tramite `onRequestClose`.
+ * 2. Guard di stato `isClosingRef`: previene collisioni da doppi tocchi rapidi.
+ * 3. Banner Locandina HD / Offline: risolve sia immagini locali require che remote.
+ * 4. Condivisione mirata con link diretto alla pagina del canale su intvstasera.it.
+ * 5. Pulsante "Guarda in Diretta" istantaneo e sicuro.
+ * 6. Pulsante "Avvisami prima dell'inizio" con promemoria 10 minuti prima.
  * 
  * @module components/ProgramDetailModal
  */
@@ -32,61 +35,46 @@ import {
   Share,
   Dimensions,
   PanResponder,
-  Animated,
 } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { openLiveStream } from '../services/streaming';
 import { ChannelLogo } from './ChannelLogo';
+import { getProgramPosterSource } from '../utils/programImages';
 import { X, Play, Bell, Share2, Clock, Check } from 'lucide-react-native';
 
 const { height } = Dimensions.get('window');
 
 export const ProgramDetailModal: React.FC = () => {
   const { selectedProgram, setSelectedProgram, colors, toggleReminder, hasReminder } = useApp();
-  const panY = useRef(new Animated.Value(0)).current;
+  const isClosingRef = useRef(false);
 
-  // Ripristina la posizione iniziale del foglio all'apertura
+  // Reset del lock alla selezione di un nuovo programma
   useEffect(() => {
     if (selectedProgram) {
-      panY.setValue(0);
+      isClosingRef.current = false;
     }
   }, [selectedProgram]);
 
   /**
-   * Chiusura affidabile e istantanea del modal.
-   * Non utilizza flag booleani bloccanti per evitare qualsiasi deadlock su Android.
+   * Chiusura affidabile, immediata e thread-safe del modal.
+   * La transizione di uscita è gestita dal sistema operativo nativo (Dialog slide-out).
    */
   const handleClose = () => {
-    Animated.timing(panY, {
-      toValue: height,
-      duration: 150,
-      useNativeDriver: true,
-    }).start(() => {
-      setSelectedProgram(null);
-    });
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+    setSelectedProgram(null);
   };
 
   /**
-   * Gestore del gesto di trascinamento swipe-down sulla maniglia
+   * Gestore non-bloccante del gesto swipe-down sulla maniglia superiore
    */
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 5,
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          panY.setValue(gestureState.dy);
-        }
-      },
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 12,
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 60 || gestureState.vy > 0.5) {
+        if (gestureState.dy > 40 || gestureState.vy > 0.4) {
           handleClose();
-        } else {
-          Animated.spring(panY, {
-            toValue: 0,
-            useNativeDriver: true,
-            bounciness: 4,
-          }).start();
         }
       },
     })
@@ -95,6 +83,12 @@ export const ProgramDetailModal: React.FC = () => {
   if (!selectedProgram) return null;
 
   const isReminded = hasReminder(selectedProgram.id);
+  const posterSource = getProgramPosterSource(
+    selectedProgram.posterUrl,
+    selectedProgram.title,
+    selectedProgram.category,
+    selectedProgram.description
+  );
 
   const handleShare = async () => {
     try {
@@ -116,31 +110,32 @@ export const ProgramDetailModal: React.FC = () => {
   return (
     <Modal
       visible={Boolean(selectedProgram)}
-      animationType="fade"
+      animationType="slide"
       transparent
       onRequestClose={handleClose}
+      statusBarTranslucent
     >
       <View style={styles.backdrop}>
-        {/* Tocco sull'area scura esterna per chiusura immediata */}
+        {/* Tocco sull'area semitrasparente esterna per chiusura istantanea */}
         <TouchableWithoutFeedback onPress={handleClose}>
           <View style={styles.backdropDismiss} />
         </TouchableWithoutFeedback>
 
-        <Animated.View
+        <View
           style={[
             styles.sheet,
             {
               backgroundColor: colors.surface,
               borderColor: colors.border,
-              transform: [{ translateY: panY }],
             },
           ]}
         >
-          {/* Maniglia di trascinamento swipe-down (PanResponder dedicato) */}
+          {/* Maniglia di trascinamento swipe-down e tasto X */}
           <View {...panResponder.panHandlers} style={styles.sheetHeader}>
-            <View style={[styles.handle, { backgroundColor: colors.borderSubtle }]} />
+            <TouchableOpacity onPress={handleClose} hitSlop={{ top: 20, bottom: 20, left: 40, right: 40 }}>
+              <View style={[styles.handle, { backgroundColor: colors.borderSubtle }]} />
+            </TouchableOpacity>
 
-            {/* Tasto X di Chiusura ad alta visibilità e hitSlop generoso */}
             <TouchableOpacity
               style={[
                 styles.closeBtn,
@@ -165,9 +160,9 @@ export const ProgramDetailModal: React.FC = () => {
             keyboardShouldPersistTaps="handled"
           >
             {/* Locandina / Immagine di copertina HD */}
-            {selectedProgram.posterUrl ? (
+            {posterSource ? (
               <Image
-                source={{ uri: selectedProgram.posterUrl }}
+                source={posterSource}
                 style={styles.bannerImage}
                 resizeMode="cover"
               />
@@ -248,18 +243,20 @@ export const ProgramDetailModal: React.FC = () => {
                 activeOpacity={0.8}
               >
                 {isReminded ? (
-                  <Check size={18} color="#ffffff" strokeWidth={2.5} style={{ marginRight: 6 }} />
+                  <>
+                    <Check size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                    <Text style={[styles.reminderActionText, { color: '#ffffff' }]}>
+                      Promemoria Attivo
+                    </Text>
+                  </>
                 ) : (
-                  <Bell size={18} color={colors.text} style={{ marginRight: 6 }} />
+                  <>
+                    <Bell size={16} color={colors.text} style={{ marginRight: 6 }} />
+                    <Text style={[styles.reminderActionText, { color: colors.text }]}>
+                      Avvisami prima dell'inizio (-10 min)
+                    </Text>
+                  </>
                 )}
-                <Text
-                  style={[
-                    styles.reminderActionText,
-                    { color: isReminded ? '#ffffff' : colors.text },
-                  ]}
-                >
-                  {isReminded ? 'Promemoria Attivo (-10 min)' : 'Avvisami prima dell\'inizio'}
-                </Text>
               </TouchableOpacity>
             </View>
 
@@ -268,7 +265,7 @@ export const ProgramDetailModal: React.FC = () => {
               <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
                 TRAMA & DETTAGLI
               </Text>
-              <Text style={[styles.description, { color: colors.text }]}>
+              <Text style={[styles.descText, { color: colors.textSecondary }]}>
                 {selectedProgram.description ||
                   'Nessuna sinossi dettagliata disponibile per questo programma.'}
               </Text>
@@ -280,13 +277,13 @@ export const ProgramDetailModal: React.FC = () => {
               onPress={handleShare}
               activeOpacity={0.7}
             >
-              <Share2 size={16} color={colors.textSecondary} style={{ marginRight: 6 }} />
+              <Share2 size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
               <Text style={[styles.shareText, { color: colors.textSecondary }]}>
-                Condividi programma
+                Condividi Programma
               </Text>
             </TouchableOpacity>
           </ScrollView>
-        </Animated.View>
+        </View>
       </View>
     </Modal>
   );
@@ -295,7 +292,7 @@ export const ProgramDetailModal: React.FC = () => {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0,0,0,0.65)',
     justifyContent: 'flex-end',
   },
   backdropDismiss: {
@@ -349,13 +346,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 12,
+    gap: 8,
   },
   channelPill: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
     gap: 6,
@@ -365,19 +363,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   numBadge: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 2,
   },
   numText: {
-    color: '#ffffff',
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
+    color: '#ffffff',
   },
   categoryBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   categoryText: {
     fontSize: 11,
@@ -393,14 +392,14 @@ const styles = StyleSheet.create({
   timeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
     borderWidth: 1,
-    marginBottom: 16,
+    marginBottom: 18,
   },
   timeText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
   actionRow: {
@@ -411,23 +410,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 13,
+    paddingVertical: 14,
     borderRadius: 14,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
   mainActionText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '800',
+    letterSpacing: 0.3,
   },
   reminderActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 13,
     borderRadius: 14,
     borderWidth: 1,
   },
@@ -441,10 +438,10 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
     marginBottom: 8,
   },
-  description: {
+  descText: {
     fontSize: 14,
     lineHeight: 22,
     fontWeight: '400',
@@ -458,7 +455,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   shareText: {
-    fontSize: 12.5,
+    fontSize: 13,
     fontWeight: '600',
   },
 });
